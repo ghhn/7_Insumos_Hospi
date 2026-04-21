@@ -9,7 +9,6 @@ st.title("⚙️ Control de Insumos Colaborativo")
 st.markdown("---")
 
 # Obtener lista de partidas para el filtro
-@st.cache_data(ttl=60)
 def load_partidas():
     return get_dataframe("SELECT codigo, descripcion FROM partidas ORDER BY codigo")
 
