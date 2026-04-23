@@ -43,22 +43,11 @@ if insumo_seleccionado:
 
     st.subheader(f"2. Cuadre Manual: {insumo_seleccionado} ({unidad_insumo})")
     
-    # Input para el adquirido global
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        nuevo_adquirido = st.number_input(
-            "Cantidad Total Adquirida (Dato):",
-            value=float(adquirido_actual),
-            min_value=0.0,
-            format="%.4f",
-            help="El total adquirido que debe cuadrar con la suma de las cantidades modificadas (APU 2)."
-        )
-    
-    st.write("### 3. Edición de Incidencias (APU 2)")
-    st.info("Edite la columna **CANTIDAD 2 (Incidencia)**. El sistema calculará automáticamente el Parcial 2 abajo.")
+    st.write("### 3. Edición de Adquisición e Incidencias (APU 2)")
+    st.info("Edite la **Cant. Adquirida** y la **CANTIDAD 2 (Incidencia)**. El sistema calculará automáticamente el Parcial 2 abajo.")
     
     # Preparamos el dataframe para el editor
-    df_editor = df_impacto[['id', 'item_1', 'codigo_insumo', 'partida_desc', 'unidad', 'cantidad_1', 'metrado_fijo', 'parcial_1', 'cantidad_2']].copy()
+    df_editor = df_impacto[['id', 'item_1', 'codigo_insumo', 'partida_desc', 'unidad', 'cantidad_1', 'metrado_fijo', 'parcial_1', 'cantidad_adquirida', 'cantidad_2']].copy()
     
     # Configuración de columnas
     column_config = {
@@ -70,6 +59,7 @@ if insumo_seleccionado:
         "cantidad_1": st.column_config.NumberColumn("Cantidad 1 (Incid.)", disabled=True, format="%.6f"),
         "metrado_fijo": st.column_config.NumberColumn("Metrado Fijo", disabled=True, format="%.4f"),
         "parcial_1": st.column_config.NumberColumn("Parcial 1", disabled=True, format="%.4f"),
+        "cantidad_adquirida": st.column_config.NumberColumn("Cant. Adquirida (Editable)", format="%.4f", required=True),
         "cantidad_2": st.column_config.NumberColumn("CANTIDAD 2 (Editable)", format="%.6f", required=True)
     }
     
@@ -86,16 +76,15 @@ if insumo_seleccionado:
     
     suma_metrado = edited_df['metrado_fijo'].sum()
     suma_parcial_1 = edited_df['parcial_1'].sum()
+    suma_adquirida = edited_df['cantidad_adquirida'].sum()
     suma_parcial_2 = edited_df['parcial_2'].sum()
-    diferencia = nuevo_adquirido - suma_parcial_2
+    diferencia = suma_adquirida - suma_parcial_2
     
     st.write("### 4. Resultados Parciales y Totales")
     
     # Crear DataFrame de visualización con los parciales y la fila de sumas
-    # Replicando el metrado fijo de nuevo como pidió el usuario para el APU 2
-    df_display = edited_df[['item_1', 'codigo_insumo', 'partida_desc', 'unidad', 'cantidad_1', 'metrado_fijo', 'parcial_1', 'cantidad_2', 'metrado_fijo', 'parcial_2']].copy()
-    # Para poder tener dos columnas iguales en pandas, las nombramos distinto
-    df_display.columns = ['Item 1', 'Código 1', 'Descripción', 'Unid.', 'Cantidad 1', 'Metrado Fijo 1', 'Parcial 1', 'Cantidad 2', 'Metrado Fijo 2', 'Parcial 2']
+    df_display = edited_df[['item_1', 'codigo_insumo', 'partida_desc', 'unidad', 'cantidad_1', 'metrado_fijo', 'parcial_1', 'cantidad_adquirida', 'cantidad_2', 'metrado_fijo', 'parcial_2']].copy()
+    df_display.columns = ['Item 1', 'Código 1', 'Descripción', 'Unid.', 'Cantidad 1', 'Metrado Fijo 1', 'Parcial 1', 'Cant. Adquirida', 'Cantidad 2', 'Metrado Fijo 2', 'Parcial 2']
     
     # Fila de totales
     df_totales = pd.DataFrame([{
@@ -106,6 +95,7 @@ if insumo_seleccionado:
         'Cantidad 1': None,
         'Metrado Fijo 1': suma_metrado,
         'Parcial 1': suma_parcial_1,
+        'Cant. Adquirida': suma_adquirida,
         'Cantidad 2': None,
         'Metrado Fijo 2': suma_metrado,
         'Parcial 2': suma_parcial_2
@@ -122,6 +112,7 @@ if insumo_seleccionado:
             "Cantidad 1": st.column_config.NumberColumn(format="%.6f"),
             "Metrado Fijo 1": st.column_config.NumberColumn(format="%.4f"),
             "Parcial 1": st.column_config.NumberColumn(format="%.4f"),
+            "Cant. Adquirida": st.column_config.NumberColumn(format="%.4f"),
             "Cantidad 2": st.column_config.NumberColumn(format="%.6f"),
             "Metrado Fijo 2": st.column_config.NumberColumn(format="%.4f"),
             "Parcial 2": st.column_config.NumberColumn(format="%.4f")
@@ -130,7 +121,7 @@ if insumo_seleccionado:
     
     st.write("---")
     c1, c2, c3 = st.columns(3)
-    c1.metric("Total Adquirido (Dato)", f"{nuevo_adquirido:.4f} {unidad_insumo}")
+    c1.metric("Suma Total Adquirida", f"{suma_adquirida:.4f} {unidad_insumo}")
     c2.metric("Suma Parcial 2 (APU Nuevo)", f"{suma_parcial_2:.4f} {unidad_insumo}")
     
     if abs(diferencia) < 0.0001:
@@ -145,6 +136,7 @@ if insumo_seleccionado:
             with engine.begin() as conn:
                 for _, row in edited_df.iterrows():
                     insumo_id = int(row['id'])
+                    nueva_adquirida = float(row['cantidad_adquirida'])
                     nueva_incidencia = float(row['cantidad_2'])
                     nueva_modificada = float(row['parcial_2'])
                     
@@ -158,7 +150,7 @@ if insumo_seleccionado:
                     conn.execute(update_query, {
                         "mod": nueva_modificada,
                         "inc": nueva_incidencia,
-                        "adq": nuevo_adquirido,
+                        "adq": nueva_adquirida,
                         "id": insumo_id
                     })
             st.success("✅ Cambios guardados correctamente en la Base de Datos.")
@@ -198,7 +190,7 @@ if insumo_seleccionado:
                         incidencia_original, parcial_original, 
                         incidencia, cantidad_modificada, cantidad_adquirida
                     )
-                    VALUES (:cod, :itm, :cins, :desc, :und, 0.0, 0.0, 0.0, 0.0, :adq)
+                    VALUES (:cod, :itm, :cins, :desc, :und, 0.0, 0.0, 0.0, 0.0, 0.0)
                 """)
                 try:
                     engine = get_engine()
@@ -208,8 +200,7 @@ if insumo_seleccionado:
                             "itm": item_1_existente,
                             "cins": codigo_insumo_existente,
                             "desc": insumo_seleccionado,
-                            "und": unidad_insumo,
-                            "adq": nuevo_adquirido
+                            "und": unidad_insumo
                         })
                     st.success(f"Insumo registrado exitosamente en la partida {codigo_nueva}.")
                     load_insumos_unicos.clear()
