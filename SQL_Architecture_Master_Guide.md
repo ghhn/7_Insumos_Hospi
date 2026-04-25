@@ -48,6 +48,8 @@ Registro detallado de adquisiciones realizadas.
 - `exp_c` (VARCHAR): Expediente relacionado.
 - `opinion_comentario`, `observacion` (TEXT): Notas y revisiones.
 - `especialidad` (VARCHAR): Especialidad del insumo.
+- `unidad_und` (VARCHAR): Unidad estandarizada.
+- `cantidad_und` (NUMERIC): Cantidad estandarizada.
 
 #### 4. `apus_detallado`
 Registro extraído y aplanado de los Análisis de Precios Unitarios (APUs).
@@ -55,15 +57,15 @@ Registro extraído y aplanado de los Análisis de Precios Unitarios (APUs).
 - `Partida_Descripcion` (TEXT): Nombre de la partida.
 - `Partida_Rendimiento` (TEXT): Rendimiento diario.
 - `Partida_Unidad` (TEXT): Unidad de medida.
-- `Partida_Costo_Unitario` (NUMERIC): Costo presupuestado.
+- `Partida_Costo_Unitario` (DOUBLE PRECISION): Costo presupuestado.
 - `Tipo_Insumo` (TEXT): MANO DE OBRA, MATERIALES, EQUIPO.
-- `Insumo_Codigo` (TEXT): Código del insumo.
+- `Insumo_Codigo` (BIGINT): Código del insumo.
 - `Insumo_Descripcion` (TEXT): Nombre del insumo dentro del APU.
 - `Insumo_Unidad` (TEXT): Unidad del insumo.
-- `Insumo_Recursos` (TEXT): Recursos asignados.
-- `Insumo_Cantidad` (NUMERIC): Cantidad base (incidencia) en el APU.
-- `Insumo_Precio` (NUMERIC): Precio del insumo.
-- `Insumo_Parcial` (NUMERIC): Costo parcial en el APU.
+- `Insumo_Recursos` (DOUBLE PRECISION): Recursos asignados.
+- `Insumo_Cantidad` (DOUBLE PRECISION): Cantidad base (incidencia) en el APU.
+- `Insumo_Precio` (DOUBLE PRECISION): Precio del insumo.
+- `Insumo_Parcial` (DOUBLE PRECISION): Costo parcial en el APU.
 - `id` (SERIAL, PK): Agregado automáticamente.
 
 ## 3. Registro de Cambios
@@ -74,4 +76,5 @@ Registro extraído y aplanado de los Análisis de Precios Unitarios (APUs).
 | 2026-04-21 | Creación de base de datos y esquema inicial. Ingesta de datos desde Excel completada. | Jorge Cusco |
 | 2026-04-24 | Sincronización de arquitectura con base de datos real (Tablas: partidas, insumos, compras). | Antigravity AI |
 | 2026-04-24 | Creación de la tabla `apus_detallado` con los datos aplanados del Excel APUS.xlsx. | Antigravity AI |
+| 2026-04-25 | Actualización de columnas en `compras` (`unidad_und`, `cantidad_und`) y tipos de datos en `apus_detallado`. | Antigravity AI |
 
