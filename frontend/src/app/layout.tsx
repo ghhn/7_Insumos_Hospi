@@ -23,6 +23,7 @@ export default function RootLayout({
             <nav className="sidebar-nav">
               <Link href="/">📊 Dashboard</Link>
               <Link href="/control-insumos">⚙️ Control Insumos</Link>
+              <Link href="/vinculador">🔗 Vinculador</Link>
               <Link href="/ajuste-manual">⚖️ Ajuste Manual</Link>
             </nav>
             <div className="sidebar-info">
