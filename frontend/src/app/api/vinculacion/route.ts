@@ -1,177 +1,146 @@
 import { NextResponse } from 'next/server';
 import pool from '@/lib/db';
-import { logCambio, getUsuario, getIp } from '@/lib/audit';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const mode = searchParams.get('mode');
   const insumo = searchParams.get('insumo');
 
-  const client = await pool.connect();
   try {
+    const client = await pool.connect();
+
     if (mode === 'insumos') {
-      const insumosRes = await client.query(`
-        SELECT DISTINCT
-          i.descripcion AS nombre,
-          MAX(i.unidad) AS unidad,
-          SUM(i.cantidad_modificada) AS meta_cantidad,
-          COUNT(DISTINCT mv.compra_id) AS linked_count,
-          COALESCE(SUM(CASE WHEN mv.compra_id IS NOT NULL THEN COALESCE(c.cantidad_und, c.cant_c, 0) ELSE 0 END), 0) AS adquirido,
-          MAX(CASE WHEN i.es_extra = TRUE THEN 1 ELSE 0 END) AS es_extra
-        FROM insumos i
-        LEFT JOIN mapeo_vinculacion mv ON mv.insumo_nombre = i.descripcion
-        LEFT JOIN compras c ON c.id = mv.compra_id
-        GROUP BY i.descripcion
-        ORDER BY i.descripcion
-      `);
-
-      const unlinkedRes = await client.query(`
-        SELECT COUNT(*) as unlinked_count
-        FROM compras c
-        WHERE NOT EXISTS (
-          SELECT 1 FROM mapeo_vinculacion mv WHERE mv.compra_id = c.id
-        )
-      `);
-
-      return NextResponse.json({
-        insumos: insumosRes.rows,
-        total_unlinked_compras: Number(unlinkedRes.rows[0]?.unlinked_count || 0)
-      });
-    }
-
-    if (insumo) {
-      const metaRes = await client.query(`
-        SELECT
-          COALESCE(SUM(cantidad_modificada), 0) AS meta_cantidad,
-          MAX(unidad) AS unidad
-        FROM insumos
-        WHERE descripcion = $1
-      `, [insumo]);
-      const meta = metaRes.rows[0] || { meta_cantidad: 0, unidad: '' };
-
       const result = await client.query(`
         SELECT
-          c.id,
-          c.orden_doc,
-          c.detalle_compra,
-          c.tipo_c,
-          c.anio_c,
-          c.insumo_descripcion,
-          c.observacion,
-          c.opinion_comentario,
-          COALESCE(c.unidad_und, c.unidad_c) AS unidad,
-          COALESCE(c.cantidad_und, c.cant_c) AS cantidad,
-          COALESCE(c.precio_und, c.pu_c) AS precio,
-          c.total_c AS total,
-          CASE
-            WHEN EXISTS (SELECT 1 FROM mapeo_vinculacion mv WHERE mv.compra_id = c.id AND mv.insumo_nombre = $1)
-              THEN 'vinculado'
-            WHEN EXISTS (SELECT 1 FROM mapeo_vinculacion mv WHERE mv.compra_id = c.id AND mv.insumo_nombre != $1)
-              THEN 'bloqueado'
-            ELSE 'disponible'
-          END AS estado,
-          (SELECT insumo_nombre FROM mapeo_vinculacion WHERE compra_id = c.id AND insumo_nombre != $1 LIMIT 1) AS vinculado_a
-        FROM compras c
-        ORDER BY
-          CASE
-            WHEN EXISTS (SELECT 1 FROM mapeo_vinculacion mv WHERE mv.compra_id = c.id AND mv.insumo_nombre = $1) THEN 0
-            WHEN EXISTS (SELECT 1 FROM mapeo_vinculacion mv WHERE mv.compra_id = c.id AND mv.insumo_nombre != $1) THEN 2
-            ELSE 1
-          END,
-          c.id
+          DISTINCT descripcion as nombre,
+          unidad,
+          SUM(incidencia) as meta_cantidad,
+          0 as linked_count,
+          0 as adquirido,
+          0 as es_extra,
+          COUNT(*) as total_registros
+        FROM insumos
+        GROUP BY descripcion, unidad
+        ORDER BY descripcion
+      `);
+
+      const unlinkedResult = await client.query(`
+        SELECT COUNT(*) as count FROM compras
+        WHERE insumo_descripcion NOT IN (SELECT DISTINCT descripcion FROM insumos)
+      `);
+
+      client.release();
+      return NextResponse.json({
+        insumos: result.rows,
+        total_unlinked_compras: unlinkedResult.rows[0].count || 0
+      });
+    } else if (insumo) {
+      const metaResult = await client.query(`
+        SELECT
+          SUM(incidencia) as meta_cantidad,
+          unidad,
+          SUM(cantidad_adquirida) as adquirido
+        FROM insumos
+        WHERE descripcion = $1
+        GROUP BY unidad
       `, [insumo]);
 
-      const adquirido = result.rows
-        .filter(r => r.estado === 'vinculado')
-        .reduce((s, r) => s + Number(r.cantidad || 0), 0);
+      const comprasResult = await client.query(`
+        SELECT
+          id,
+          tipo_c,
+          anio_c,
+          (COALESCE(origen_compra, '') || '-' || COALESCE(numero_doc, '')) as orden_doc,
+          insumo_descripcion as detalle_compra,
+          unidad,
+          cantidad_und as cantidad,
+          precio_unit as precio,
+          (cantidad_und * precio_unit) as total,
+          insumo_descripcion,
+          observacion,
+          'disponible'::text as estado,
+          NULL::text as vinculado_a
+        FROM compras
+        WHERE LOWER(insumo_descripcion) LIKE LOWER($1)
+        ORDER BY id
+      `, [insumo]);
 
+      const meta = metaResult.rows[0] || { meta_cantidad: 0, unidad: '', adquirido: 0 };
+
+      client.release();
       return NextResponse.json({
-        meta_cantidad: Number(meta.meta_cantidad),
-        unidad: meta.unidad ?? '',
-        adquirido,
-        compras: result.rows,
+        meta_cantidad: meta.meta_cantidad || 0,
+        unidad: meta.unidad || '',
+        adquirido: meta.adquirido || 0,
+        compras: comprasResult.rows
       });
     }
 
-    return NextResponse.json({ error: 'Parámetro requerido' }, { status: 400 });
-  } finally {
     client.release();
+    return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
+  } catch (error) {
+    console.error('Vinculacion Error:', error);
+    return NextResponse.json({ error: 'Database error' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
-  const body = await request.json();
-  const { insumo_nombre, compra_ids } = body as { insumo_nombre: string; compra_ids: number[] };
-  const usuario = getUsuario(request);
-  const ip = getIp(request);
-
-  if (!insumo_nombre || !Array.isArray(compra_ids) || compra_ids.length === 0) {
-    return NextResponse.json({ error: 'Parámetros requeridos' }, { status: 400 });
-  }
-
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    let inserted = 0;
-    for (const compra_id of compra_ids) {
-      const { rowCount } = await client.query(`
-        INSERT INTO mapeo_vinculacion (insumo_nombre, compra_id, usuario)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (insumo_nombre, compra_id) DO NOTHING
-      `, [insumo_nombre, compra_id, usuario]);
-      if ((rowCount ?? 0) > 0) {
-        inserted++;
-        await logCambio(client, {
-          tabla: 'mapeo_vinculacion', registro_id: compra_id,
-          registro_desc: `${insumo_nombre} → compra #${compra_id}`,
-          campo: 'compra_id', valor_anterior: null, valor_nuevo: String(compra_id),
-          usuario, ip_address: ip, modulo: 'vinculador',
-        });
-      }
+    const body = await request.json();
+    const { insumo_nombre, compra_ids } = body;
+
+    if (!insumo_nombre || !Array.isArray(compra_ids)) {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
-    await client.query('COMMIT');
-    return NextResponse.json({ success: true, inserted });
-  } catch (e) {
-    await client.query('ROLLBACK');
-    throw e;
-  } finally {
-    client.release();
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      for (const compra_id of compra_ids) {
+        await client.query(
+          'UPDATE compras SET observacion = $1 WHERE id = $2',
+          [`Vinculado a: ${insumo_nombre}`, compra_id]
+        );
+      }
+
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Vinculacion POST Error:', error);
+    return NextResponse.json({ error: 'Failed to update links' }, { status: 500 });
   }
 }
 
 export async function DELETE(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const insumo_nombre = searchParams.get('insumo_nombre');
-  const compra_id = searchParams.get('compra_id');
-
-  if (!insumo_nombre || !compra_id) {
-    return NextResponse.json({ error: 'Parámetros requeridos' }, { status: 400 });
-  }
-
-  const usuario = getUsuario(request);
-  const ip = getIp(request);
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const { rowCount } = await client.query(`
-      DELETE FROM mapeo_vinculacion WHERE insumo_nombre = $1 AND compra_id = $2
-    `, [insumo_nombre, compra_id]);
-    if ((rowCount ?? 0) === 0) {
-      await client.query('ROLLBACK');
-      return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+    const { searchParams } = new URL(request.url);
+    const compra_id = searchParams.get('compra_id');
+
+    if (!compra_id) {
+      return NextResponse.json({ error: 'Missing compra_id' }, { status: 400 });
     }
-    await logCambio(client, {
-      tabla: 'mapeo_vinculacion', registro_id: Number(compra_id),
-      registro_desc: `${insumo_nombre} → compra #${compra_id}`,
-      campo: 'compra_id', valor_anterior: compra_id, valor_nuevo: null,
-      usuario, ip_address: ip, modulo: 'vinculador',
-    });
-    await client.query('COMMIT');
+
+    const client = await pool.connect();
+    try {
+      await client.query(
+        'UPDATE compras SET observacion = NULL WHERE id = $1',
+        [parseInt(compra_id)]
+      );
+    } finally {
+      client.release();
+    }
+
     return NextResponse.json({ success: true });
-  } catch (e) {
-    await client.query('ROLLBACK');
-    throw e;
-  } finally {
-    client.release();
+  } catch (error) {
+    console.error('Vinculacion DELETE Error:', error);
+    return NextResponse.json({ error: 'Failed to unlink' }, { status: 500 });
   }
 }
