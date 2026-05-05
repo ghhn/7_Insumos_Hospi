@@ -14,14 +14,17 @@ export async function GET(request: Request) {
 
     // Fetch APU distribution with price reference
     const query = `
-      SELECT a.id, p.item as codigo_partida, '' as item_1, a.codigo_insumo, p.descripcion as partida_desc, a.unidad,
-             a.cantidad_p as cantidad_1, p.cantidad_p as metrado_fijo, (a.cantidad_p * p.cantidad_p) as parcial_1,
-             a.cantidad_c as cantidad_2, (a.cantidad_c * p.cantidad_p) as cantidad_modificada, 0 as cantidad_adquirida,
+      SELECT a.id, COALESCE(p.item, a.item_partida) as codigo_partida, '' as item_1, a.codigo_insumo, 
+             COALESCE(p.descripcion, '[PARTIDA FALTANTE EN PRESUPUESTO]') as partida_desc, a.unidad,
+             a.cantidad_p as cantidad_1, COALESCE(p.cantidad_p, 0) as metrado_fijo, 
+             (a.cantidad_p * COALESCE(p.cantidad_p, 0)) as parcial_1,
+             a.cantidad_c as cantidad_2, (a.cantidad_c * COALESCE(p.cantidad_p, 0)) as cantidad_modificada, 
+             0 as cantidad_adquirida,
              COALESCE(a.precio_p, 0) as precio_unit_original
       FROM acus a
-      JOIN partidas_p p ON a.item_partida = p.item
+      LEFT JOIN partidas_p p ON a.item_partida = p.item
       WHERE a.codigo_insumo = $1
-      ORDER BY p.item
+      ORDER BY a.item_partida
     `;
     const result = await client.query(query, [insumo]);
     client.release();
