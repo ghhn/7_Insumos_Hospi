@@ -13,9 +13,9 @@ export async function GET(request: Request) {
       const result = await client.query(`
         SELECT
           i.codigo_insumo as codigo,
-          i.descripcion_insumo as nombre,
-          i.unidad,
-          i.cantidad_requerida_p as meta_cantidad,
+          MAX(i.descripcion_insumo) as nombre,
+          MAX(i.unidad) as unidad,
+          SUM(i.cantidad_requerida_p) as meta_cantidad,
           COUNT(m.id) as linked_count,
           COALESCE((
             SELECT SUM(c.cantidad_und) 
@@ -27,8 +27,8 @@ export async function GET(request: Request) {
           1 as total_registros
         FROM insumos_resumen i
         LEFT JOIN mapeo_vinculacion m ON i.codigo_insumo = m.codigo_insumo
-        GROUP BY i.codigo_insumo, i.descripcion_insumo, i.unidad, i.cantidad_requerida_p
-        ORDER BY i.descripcion_insumo
+        GROUP BY i.codigo_insumo
+        ORDER BY MAX(i.descripcion_insumo)
       `);
 
       const unlinkedResult = await client.query(`
