@@ -6,11 +6,11 @@ export async function GET() {
     const client = await pool.connect();
     
     // Get unique insumos
-    const insumosResult = await client.query('SELECT DISTINCT descripcion FROM insumos ORDER BY descripcion');
-    const insumos = insumosResult.rows.map(r => r.descripcion);
+    const insumosResult = await client.query('SELECT DISTINCT codigo_insumo as codigo, descripcion_insumo as nombre FROM insumos_resumen ORDER BY descripcion_insumo');
+    const insumos = insumosResult.rows;
     
     // Get unique units
-    const unitsResult = await client.query('SELECT DISTINCT unidad FROM insumos UNION SELECT DISTINCT unidad_c FROM compras WHERE unidad_c IS NOT NULL');
+    const unitsResult = await client.query('SELECT DISTINCT unidad FROM insumos_resumen UNION SELECT DISTINCT unidad as unidad_c FROM compras_c WHERE unidad IS NOT NULL');
     const unidades = unitsResult.rows.map(r => r.unidad).filter(Boolean);
     
     client.release();

@@ -62,7 +62,6 @@ export default function ApuComparative({
               <th style={{textAlign: 'left', padding: '4px'}}>Insumo</th>
               <th style={{padding: '4px'}}>Unid</th>
               <th style={{textAlign: 'right', padding: '4px'}}>Cant</th>
-              <th style={{textAlign: 'right', padding: '4px'}}>Precio</th>
               <th style={{textAlign: 'right', padding: '4px'}}>Parcial</th>
             </tr>
           </thead>
@@ -81,7 +80,6 @@ export default function ApuComparative({
                   </td>
                   <td style={{padding: '4px', textAlign: 'center'}}>{ins.unidad}</td>
                   <td style={{padding: '4px', textAlign: 'right'}}>{cant.toFixed(4)}</td>
-                  <td style={{padding: '4px', textAlign: 'right'}}>{precio.toFixed(2)}</td>
                   <td style={{padding: '4px', textAlign: 'right', fontWeight: isSelected ? 'bold' : 'normal'}}>{parcial.toFixed(4)}</td>
                 </tr>
               );
@@ -89,7 +87,7 @@ export default function ApuComparative({
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={4} style={{textAlign: 'right', fontWeight: 'bold', padding: '8px'}}>COSTO DIRECTO:</td>
+              <td colSpan={3} style={{textAlign: 'right', fontWeight: 'bold', padding: '8px'}}>TOTAL:</td>
               <td style={{textAlign: 'right', fontWeight: 'bold', padding: '8px'}}>{totalAntiguo.toFixed(4)}</td>
             </tr>
           </tfoot>
@@ -112,7 +110,6 @@ export default function ApuComparative({
               <th style={{textAlign: 'left', padding: '4px'}}>Insumo</th>
               <th style={{padding: '4px'}}>Unid</th>
               <th style={{textAlign: 'right', padding: '4px'}}>Cant (Nueva)</th>
-              <th style={{textAlign: 'right', padding: '4px'}}>Precio</th>
               <th style={{textAlign: 'right', padding: '4px'}}>Parcial (Nuevo)</th>
             </tr>
           </thead>
@@ -126,7 +123,12 @@ export default function ApuComparative({
               
               // Modificada uses the prop if selected, otherwise it uses the original or DB value
               const cantNueva = isSelected ? modifiedIncidencia : cantOrig;
-              const parcialNuevo = cantNueva * precio;
+              // Parcial calculation: since pricing is irrelevant, we can just use the quantity 
+              // but to maintain parity with how it used to calculate "Parcial", we'll just show the quantity.
+              // Wait, Parcial IS the quantity multiplied by performance? No, Parcial IS the quantity * metrado.
+              // But here in ApuComparative, Parcial = Cantidad total. Wait, Parcial Original IS `parcial_p`. `incidencia_original` is `cantidad_p`.
+              // So `parcial_p` is basically the cost in standard APU, but for us "Parcial" means total quantity.
+              const parcialNuevo = cantNueva;
               
               totalNuevo += parcialNuevo;
               
@@ -153,7 +155,6 @@ export default function ApuComparative({
                     )}
                   </td>
                   
-                  <td style={{padding: '4px', textAlign: 'right'}}>{precio.toFixed(2)}</td>
                   <td style={{padding: '4px', textAlign: 'right', fontWeight: isSelected ? 'bold' : 'normal', color: isSelected ? '#1d4ed8' : 'inherit'}}>
                     {parcialNuevo.toFixed(4)}
                   </td>
@@ -163,7 +164,7 @@ export default function ApuComparative({
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={4} style={{textAlign: 'right', fontWeight: 'bold', padding: '8px', color: '#1d4ed8'}}>COSTO DIRECTO NUEVO:</td>
+              <td colSpan={3} style={{textAlign: 'right', fontWeight: 'bold', padding: '8px', color: '#1d4ed8'}}>TOTAL NUEVO:</td>
               <td style={{textAlign: 'right', fontWeight: 'bold', padding: '8px', color: '#1d4ed8'}}>{totalNuevo.toFixed(4)}</td>
             </tr>
           </tfoot>

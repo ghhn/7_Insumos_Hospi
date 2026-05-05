@@ -8,22 +8,25 @@ export async function GET() {
     const result = await client.query(`
       SELECT
         c.id,
-        c.origen_compra,
-        c.numero_doc,
-        c.tipo_c,
-        c.anio_c,
-        c.insumo_descripcion,
-        c.unidad,
-        c.cantidad_und,
-        c.precio_unit,
-        (c.cantidad_und * c.precio_unit) as total,
-        c.observacion,
+        c.origen as origen_compra,
+        c.num_compra as numero_doc,
+        'COMPRA' as tipo_c,
+        c.anio as anio_c,
+        c.detalle as insumo_descripcion,
+        COALESCE(c.unidad_und, c.unidad) as unidad,
+        COALESCE(c.cantidad_und, c.cantidad_c) as cantidad_und,
+        COALESCE(c.precio_und, c.precio_unit_c) as precio_unit,
+        (COALESCE(c.cantidad_und, c.cantidad_c) * COALESCE(c.precio_und, c.precio_unit_c)) as total,
+        '' as observacion,
         CASE
-          WHEN c.observacion LIKE 'Vinculado a:%' THEN 'VINCULADO'
+          WHEN m.id IS NOT NULL THEN 'VINCULADO'
           ELSE 'DISPONIBLE'
-        END as estado
-      FROM compras c
-      ORDER BY c.origen_compra, c.numero_doc
+        END as estado,
+        i.descripcion_insumo as vinculado_a
+      FROM compras_c c
+      LEFT JOIN mapeo_vinculacion m ON c.id = m.compra_id
+      LEFT JOIN insumos_p i ON m.codigo_insumo = i.codigo_insumo
+      ORDER BY c.origen, c.num_compra
     `);
 
     client.release();
@@ -33,7 +36,7 @@ export async function GET() {
 
     result.rows.forEach(row => {
       const orden = `${row.origen_compra || ''}-${row.numero_doc || ''}`.replace(/^-|-$/g, '');
-      const vinculadoA = row.observacion?.replace('Vinculado a: ', '') || '';
+      const vinculadoA = row.vinculado_a || '';
       const estado = row.estado;
 
       csv += [

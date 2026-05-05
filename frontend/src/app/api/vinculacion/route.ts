@@ -12,26 +12,27 @@ export async function GET(request: Request) {
     if (mode === 'insumos') {
       const result = await client.query(`
         SELECT
-          i.descripcion as nombre,
+          i.codigo_insumo as codigo,
+          i.descripcion_insumo as nombre,
           i.unidad,
-          SUM(i.incidencia) as meta_cantidad,
+          i.cantidad_requerida_p as meta_cantidad,
           COUNT(m.id) as linked_count,
           COALESCE((
             SELECT SUM(c.cantidad_und) 
             FROM mapeo_vinculacion m2 
-            JOIN compras c ON m2.compra_id = c.id 
-            WHERE m2.insumo_nombre = i.descripcion
+            JOIN compras_c c ON m2.compra_id = c.id 
+            WHERE m2.codigo_insumo = i.codigo_insumo
           ), 0) as adquirido,
-          MAX(CAST(i.es_extra AS INT)) as es_extra,
-          COUNT(i.id) as total_registros
-        FROM insumos i
-        LEFT JOIN mapeo_vinculacion m ON i.descripcion = m.insumo_nombre
-        GROUP BY i.descripcion, i.unidad
-        ORDER BY i.descripcion
+          0 as es_extra,
+          1 as total_registros
+        FROM insumos_resumen i
+        LEFT JOIN mapeo_vinculacion m ON i.codigo_insumo = m.codigo_insumo
+        GROUP BY i.codigo_insumo, i.descripcion_insumo, i.unidad, i.cantidad_requerida_p
+        ORDER BY i.descripcion_insumo
       `);
 
       const unlinkedResult = await client.query(`
-        SELECT COUNT(*) as count FROM compras
+        SELECT COUNT(*) as count FROM compras_c
         WHERE id NOT IN (SELECT compra_id FROM mapeo_vinculacion)
       `);
 
@@ -41,42 +42,42 @@ export async function GET(request: Request) {
         total_unlinked_compras: unlinkedResult.rows[0].count || 0
       });
     } else if (insumo) {
+      // insumo is codigo_insumo now
       const metaResult = await client.query(`
         SELECT
-          SUM(incidencia) as meta_cantidad,
+          cantidad_requerida_p as meta_cantidad,
           unidad
-        FROM insumos
-        WHERE descripcion = $1
-        GROUP BY unidad
+        FROM insumos_resumen
+        WHERE codigo_insumo = $1
       `, [insumo]);
 
       const adquiridoResult = await client.query(`
         SELECT SUM(c.cantidad_und) as adquirido
         FROM mapeo_vinculacion m
-        JOIN compras c ON m.compra_id = c.id
-        WHERE m.insumo_nombre = $1
+        JOIN compras_c c ON m.compra_id = c.id
+        WHERE m.codigo_insumo = $1
       `, [insumo]);
 
       const comprasResult = await client.query(`
         SELECT
           c.id,
-          c.tipo_c,
-          c.anio_c,
-          c.orden_doc,
-          c.detalle_compra,
+          c.tipo_compra as tipo_c,
+          c.anio,
+          c.num_compra as orden_doc,
+          c.detalle as detalle_compra,
           c.unidad_und as unidad,
           c.cantidad_und as cantidad,
           c.precio_und as precio,
           (c.cantidad_und * c.precio_und) as total,
-          c.insumo_descripcion,
-          c.observacion,
+          c.detalle as insumo_descripcion,
+          '' as observacion,
           CASE 
-              WHEN m.id IS NOT NULL AND m.insumo_nombre = $1 THEN 'vinculado'
-              WHEN m.id IS NOT NULL AND m.insumo_nombre != $1 THEN 'bloqueado'
+              WHEN m.id IS NOT NULL AND m.codigo_insumo = $1 THEN 'vinculado'
+              WHEN m.id IS NOT NULL AND m.codigo_insumo != $1 THEN 'bloqueado'
               ELSE 'disponible'
           END as estado,
-          m.insumo_nombre as vinculado_a
-        FROM compras c
+          (SELECT descripcion_insumo FROM insumos_resumen ir WHERE ir.codigo_insumo = m.codigo_insumo LIMIT 1) as vinculado_a
+        FROM compras_c c
         LEFT JOIN mapeo_vinculacion m ON c.id = m.compra_id
         ORDER BY c.id DESC
       `, [insumo]);
@@ -104,10 +105,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { insumo_nombre, compra_ids } = body;
+    const { codigo_insumo, compra_ids } = body;
     const usuario = request.headers.get('X-Usuario') || 'Sistema';
 
-    if (!insumo_nombre || !Array.isArray(compra_ids)) {
+    if (!codigo_insumo || !Array.isArray(compra_ids)) {
       return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
     }
 
@@ -116,12 +117,11 @@ export async function POST(request: Request) {
       await client.query('BEGIN');
 
       for (const compra_id of compra_ids) {
-        // Verificar si ya está vinculado
         const check = await client.query('SELECT id FROM mapeo_vinculacion WHERE compra_id = $1', [compra_id]);
         if (check.rows.length === 0) {
           await client.query(
-            'INSERT INTO mapeo_vinculacion (insumo_nombre, compra_id, usuario) VALUES ($1, $2, $3)',
-            [insumo_nombre, compra_id, usuario]
+            'INSERT INTO mapeo_vinculacion (codigo_insumo, compra_id, usuario) VALUES ($1, $2, $3)',
+            [codigo_insumo, compra_id, usuario]
           );
         }
       }
@@ -145,17 +145,17 @@ export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const compra_id = searchParams.get('compra_id');
-    const insumo_nombre = searchParams.get('insumo_nombre');
+    const codigo_insumo = searchParams.get('codigo_insumo');
 
-    if (!compra_id || !insumo_nombre) {
+    if (!compra_id || !codigo_insumo) {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
     const client = await pool.connect();
     try {
       await client.query(
-        'DELETE FROM mapeo_vinculacion WHERE compra_id = $1 AND insumo_nombre = $2',
-        [parseInt(compra_id), insumo_nombre]
+        'DELETE FROM mapeo_vinculacion WHERE compra_id = $1 AND codigo_insumo = $2',
+        [parseInt(compra_id), codigo_insumo]
       );
     } finally {
       client.release();

@@ -14,14 +14,14 @@ export async function GET(request: Request) {
 
     // Fetch APU distribution with price reference
     const query = `
-      SELECT i.id, p.codigo as codigo_partida, i.item_1, i.codigo_insumo, p.descripcion as partida_desc, i.unidad,
-             i.incidencia_original as cantidad_1, p.metrado_fijo, i.parcial_original as parcial_1,
-             i.incidencia as cantidad_2, i.cantidad_modificada, i.cantidad_adquirida,
-             COALESCE(i.precio_unit, 0) as precio_unit_original
-      FROM insumos i
-      JOIN partidas p ON i.codigo_partida = p.codigo
-      WHERE i.descripcion = $1
-      ORDER BY i.codigo_partida
+      SELECT a.id, p.item as codigo_partida, '' as item_1, a.codigo_insumo, p.descripcion as partida_desc, a.unidad,
+             a.cantidad_p as cantidad_1, p.cantidad_p as metrado_fijo, (a.cantidad_p * p.cantidad_p) as parcial_1,
+             a.cantidad_c as cantidad_2, (a.cantidad_c * p.cantidad_p) as cantidad_modificada, 0 as cantidad_adquirida,
+             COALESCE(a.precio_p, 0) as precio_unit_original
+      FROM acus a
+      JOIN partidas_p p ON a.item_partida = p.item
+      WHERE a.codigo_insumo = $1
+      ORDER BY p.item
     `;
     const result = await client.query(query, [insumo]);
     client.release();
@@ -48,23 +48,18 @@ export async function POST(request: Request) {
       
       for (const update of updates) {
         await client.query(
-          `UPDATE insumos 
-           SET cantidad_modificada = $1, incidencia = $2, cantidad_adquirida = $3 
-           WHERE id = $4`,
-          [update.cantidad_modificada, update.cantidad_2, update.cantidad_adquirida, update.id]
+          `UPDATE acus 
+           SET cantidad_c = $1
+           WHERE id = $2`,
+          [update.cantidad_2, update.id]
         );
       }
 
       if (globalNameUpdate && globalNameUpdate.oldName && globalNameUpdate.newName && globalNameUpdate.oldName !== globalNameUpdate.newName) {
-        // Update insumos description
+        // Update insumos description using codigo_insumo as oldName
         await client.query(
-          `UPDATE insumos SET descripcion = $1 WHERE descripcion = $2`,
-          [globalNameUpdate.newName, globalNameUpdate.oldName]
-        );
-        // Update compras relation
-        await client.query(
-          `UPDATE compras SET insumo_descripcion = $1 WHERE insumo_descripcion = $2`,
-          [globalNameUpdate.newName, globalNameUpdate.oldName]
+          `UPDATE acus SET descripcion_insumo = $1 WHERE codigo_insumo = $2`,
+          [globalNameUpdate.newName, globalNameUpdate.oldName] // oldName is now passed as codigo_insumo from frontend
         );
       }
       

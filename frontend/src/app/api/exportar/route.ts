@@ -58,74 +58,72 @@ export async function GET() {
     const [apuRes, comprasRes, resumenRes, histRes, apuPartidaRes] = await Promise.all([
       client.query(`
         SELECT
-          p.codigo          AS partida_codigo,
+          p.item            AS partida_codigo,
           p.descripcion     AS partida_desc,
           p.unidad          AS partida_unidad,
-          p.metrado_fijo,
-          i.descripcion     AS insumo_desc,
-          i.unidad          AS insumo_unidad,
-          i.incidencia_original,
-          i.parcial_original,
-          i.incidencia      AS incidencia_mod,
-          i.cantidad_modificada,
-          i.cantidad_adquirida,
-          (i.cantidad_adquirida - i.cantidad_modificada) AS diferencia,
-          i.comentario
-        FROM insumos i
-        JOIN partidas p ON i.codigo_partida = p.codigo
-        ORDER BY p.codigo, i.id
+          p.cantidad_p      AS metrado_fijo,
+          a.descripcion_insumo AS insumo_desc,
+          a.unidad          AS insumo_unidad,
+          a.cantidad_p      AS incidencia_original,
+          a.parcial_p       AS parcial_original,
+          a.cantidad_c      AS incidencia_mod,
+          (a.cantidad_c * p.cantidad_p) AS cantidad_modificada,
+          COALESCE((SELECT SUM(COALESCE(c.cantidad_und, c.cantidad_c)) FROM compras_c c JOIN mapeo_vinculacion m ON c.id = m.compra_id WHERE m.codigo_insumo = a.codigo_insumo), 0) AS cantidad_adquirida,
+          COALESCE((SELECT SUM(COALESCE(c.cantidad_und, c.cantidad_c)) FROM compras_c c JOIN mapeo_vinculacion m ON c.id = m.compra_id WHERE m.codigo_insumo = a.codigo_insumo), 0) - (a.cantidad_c * p.cantidad_p) AS diferencia,
+          ''                AS comentario
+        FROM acus a
+        JOIN partidas_p p ON a.item_partida = p.item
+        ORDER BY p.item, a.id
       `),
       client.query(`
         SELECT
-          insumo_descripcion,
-          orden_doc, detalle_compra,
-          unidad_c, cant_c, pu_c, total_c,
-          COALESCE(unidad_und,   unidad_c) AS unidad_und,
-          COALESCE(cantidad_und, cant_c)   AS cantidad_und,
-          COALESCE(precio_und,   pu_c)     AS precio_und,
-          observacion
-        FROM compras
-        ORDER BY insumo_descripcion, id
+          c.detalle AS insumo_descripcion,
+          c.num_compra AS orden_doc, c.detalle AS detalle_compra,
+          c.unidad AS unidad_c, c.cantidad_c AS cant_c, c.precio_unit_c AS pu_c, c.total_c AS total_c,
+          COALESCE(c.unidad_und, c.unidad) AS unidad_und,
+          COALESCE(c.cantidad_und, c.cantidad_c) AS cantidad_und,
+          COALESCE(c.precio_und, c.precio_unit_c) AS precio_und,
+          '' AS observacion
+        FROM compras_c c
+        ORDER BY c.detalle, c.id
       `),
       client.query(`
         SELECT
-          i.descripcion                                          AS insumo,
-          i.unidad,
-          SUM(i.parcial_original)                                AS total_parcial_orig,
-          SUM(i.cantidad_modificada)                             AS total_modificado,
-          SUM(i.cantidad_adquirida)                              AS total_adquirido,
-          SUM(i.cantidad_adquirida) - SUM(i.cantidad_modificada) AS diferencia,
-          COUNT(DISTINCT i.codigo_partida)                       AS num_partidas
-        FROM insumos i
-        JOIN partidas p ON i.codigo_partida = p.codigo
-        GROUP BY i.descripcion, i.unidad
-        ORDER BY i.descripcion
+          a.descripcion_insumo                                   AS insumo,
+          a.unidad,
+          SUM(a.parcial_p)                                       AS total_parcial_orig,
+          SUM(a.cantidad_c * p.cantidad_p)                       AS total_modificado,
+          COALESCE((SELECT SUM(COALESCE(c.cantidad_und, c.cantidad_c)) FROM compras_c c JOIN mapeo_vinculacion m ON c.id = m.compra_id WHERE m.codigo_insumo = a.codigo_insumo), 0) AS total_adquirido,
+          COALESCE((SELECT SUM(COALESCE(c.cantidad_und, c.cantidad_c)) FROM compras_c c JOIN mapeo_vinculacion m ON c.id = m.compra_id WHERE m.codigo_insumo = a.codigo_insumo), 0) - SUM(a.cantidad_c * p.cantidad_p) AS diferencia,
+          COUNT(DISTINCT a.item_partida)                         AS num_partidas
+        FROM acus a
+        JOIN partidas_p p ON a.item_partida = p.item
+        GROUP BY a.codigo_insumo, a.descripcion_insumo, a.unidad
+        ORDER BY a.descripcion_insumo
       `),
       client.query(`
         SELECT
-          to_char(fecha AT TIME ZONE 'America/Lima', 'DD/MM/YYYY HH24:MI:SS') AS fecha,
-          usuario, modulo, tabla,
-          registro_id, registro_desc, campo,
-          valor_anterior, valor_nuevo
-        FROM historial_cambios
-        ORDER BY fecha DESC
-        LIMIT 5000
+          '2026-05-05 00:00:00' AS fecha,
+          '' as usuario, '' as modulo, '' as tabla,
+          '' as registro_id, '' as registro_desc, '' as campo,
+          '' as valor_anterior, '' as valor_nuevo
+        LIMIT 0
       `),
       client.query(`
         SELECT
-          p.codigo          AS partida_codigo,
+          p.item            AS partida_codigo,
           p.descripcion     AS partida_desc,
           p.unidad          AS partida_unidad,
-          p.metrado_fijo,
-          i.descripcion     AS insumo_desc,
-          i.unidad          AS insumo_unidad,
-          i.incidencia_original,
-          i.parcial_original,
-          i.cantidad_modificada,
-          i.es_extra
-        FROM insumos i
-        JOIN partidas p ON i.codigo_partida = p.codigo
-        ORDER BY p.codigo, CASE WHEN i.es_extra THEN 1 ELSE 0 END, i.id
+          p.cantidad_p      AS metrado_fijo,
+          a.descripcion_insumo AS insumo_desc,
+          a.unidad          AS insumo_unidad,
+          a.cantidad_p      AS incidencia_original,
+          a.parcial_p       AS parcial_original,
+          (a.cantidad_c * p.cantidad_p) AS cantidad_modificada,
+          false             AS es_extra
+        FROM acus a
+        JOIN partidas_p p ON a.item_partida = p.item
+        ORDER BY p.item, a.id
       `),
     ]);
     client.release();

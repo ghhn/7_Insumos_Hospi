@@ -10,16 +10,18 @@ export async function GET(request: Request) {
     
     if (!partida) {
       // Return all partidas
-      const result = await client.query('SELECT codigo, descripcion FROM partidas ORDER BY codigo');
+      const result = await client.query('SELECT item as codigo, descripcion FROM partidas_p ORDER BY item');
       client.release();
       return NextResponse.json(result.rows);
     } else {
       // Return insumos for a specific partida
       const query = `
-        SELECT id, descripcion, unidad, incidencia, cantidad_adquirida, cantidad_modificada 
-        FROM insumos 
-        WHERE codigo_partida = $1 
-        ORDER BY id
+        SELECT a.id, a.descripcion_insumo as descripcion, a.unidad, a.cantidad_c as incidencia, 
+               0 as cantidad_adquirida, (a.cantidad_c * p.cantidad_p) as cantidad_modificada 
+        FROM acus a
+        JOIN partidas_p p ON a.item_partida = p.item
+        WHERE a.item_partida = $1 
+        ORDER BY a.id
       `;
       const result = await client.query(query, [partida]);
       client.release();
@@ -46,10 +48,10 @@ export async function POST(request: Request) {
       
       for (const update of updates) {
         await client.query(
-          `UPDATE insumos 
-           SET incidencia = $1, cantidad_adquirida = $2, cantidad_modificada = $3 
-           WHERE id = $4`,
-          [update.incidencia, update.cantidad_adquirida, update.cantidad_modificada, update.id]
+          `UPDATE acus 
+           SET cantidad_c = $1
+           WHERE id = $2`,
+          [update.incidencia, update.id]
         );
       }
       

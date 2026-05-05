@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { getClientUsuario } from '@/lib/clientUtils';
 
 type InsumoStat = {
+  codigo: string;
   nombre: string;
   unidad: string;
   meta_cantidad: number;
@@ -49,7 +50,8 @@ export default function VinculadorPage() {
   const [insumos, setInsumos] = useState<InsumoStat[]>([]);
   const [totalUnlinkedCompras, setTotalUnlinkedCompras] = useState(0);
   const [loadingInsumos, setLoadingInsumos] = useState(true);
-  const [selectedInsumo, setSelectedInsumo] = useState<string | null>(null);
+  const [selectedInsumoCodigo, setSelectedInsumoCodigo] = useState<string | null>(null);
+  const [selectedInsumoNombre, setSelectedInsumoNombre] = useState<string | null>(null);
   const [comprasData, setComprasData] = useState<ComprasData | null>(null);
   const [loadingCompras, setLoadingCompras] = useState(false);
   const [searchInsumo, setSearchInsumo] = useState('');
@@ -71,21 +73,22 @@ export default function VinculadorPage() {
       });
   }, []);
 
-  const loadCompras = useCallback((nombre: string) => {
+  const loadCompras = useCallback((codigo: string) => {
     setLoadingCompras(true);
     setSelected(new Set());
-    fetch(`/api/vinculacion?insumo=${encodeURIComponent(nombre)}`)
+    fetch(`/api/vinculacion?insumo=${encodeURIComponent(codigo)}`)
       .then(r => r.json())
       .then((data: ComprasData) => { setComprasData(data); setLoadingCompras(false); });
   }, []);
 
   useEffect(() => { loadInsumos(); }, [loadInsumos]);
 
-  const handleSelectInsumo = (nombre: string) => {
-    setSelectedInsumo(nombre);
+  const handleSelectInsumo = (codigo: string, nombre: string) => {
+    setSelectedInsumoCodigo(codigo);
+    setSelectedInsumoNombre(nombre);
     setSearchCompra('');
     setFilterCompra('all');
-    loadCompras(nombre);
+    loadCompras(codigo);
   };
 
   const toggleSelect = (id: number, estado: string) => {
@@ -98,17 +101,17 @@ export default function VinculadorPage() {
   };
 
   const handleVincular = async () => {
-    if (!selectedInsumo || selected.size === 0) return;
+    if (!selectedInsumoCodigo || selected.size === 0) return;
     setSaving(true);
     try {
       const res = await fetch('/api/vinculacion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Usuario': getClientUsuario() },
-        body: JSON.stringify({ insumo_nombre: selectedInsumo, compra_ids: [...selected] }),
+        body: JSON.stringify({ codigo_insumo: selectedInsumoCodigo, compra_ids: [...selected] }),
       });
       if (res.ok) {
         setSelected(new Set());
-        loadCompras(selectedInsumo);
+        loadCompras(selectedInsumoCodigo);
         loadInsumos();
       }
     } finally {
@@ -117,14 +120,14 @@ export default function VinculadorPage() {
   };
 
   const handleDesvincular = async (compra_id: number) => {
-    if (!selectedInsumo) return;
+    if (!selectedInsumoCodigo) return;
     const res = await fetch(
-      `/api/vinculacion?insumo_nombre=${encodeURIComponent(selectedInsumo)}&compra_id=${compra_id}`,
+      `/api/vinculacion?codigo_insumo=${encodeURIComponent(selectedInsumoCodigo)}&compra_id=${compra_id}`,
       { method: 'DELETE', headers: { 'X-Usuario': getClientUsuario() } }
     );
     if (res.ok) {
       setConfirmUnlink(null);
-      loadCompras(selectedInsumo);
+      loadCompras(selectedInsumoCodigo);
       loadInsumos();
     }
   };
@@ -227,10 +230,10 @@ export default function VinculadorPage() {
             {loadingInsumos ? (
               <div style={{ padding: '2rem', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>Cargando...</div>
             ) : filteredInsumos.map(ins => {
-              const isSelected = selectedInsumo === ins.nombre;
+              const isSelected = selectedInsumoCodigo === ins.codigo;
               const isLinked = Number(ins.linked_count) > 0;
               return (
-                <div key={ins.nombre} onClick={() => handleSelectInsumo(ins.nombre)}
+                <div key={ins.codigo} onClick={() => handleSelectInsumo(ins.codigo, ins.nombre)}
                   style={{ padding: '0.55rem 0.85rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', background: isSelected ? '#dbeafe' : isLinked ? '#f0fdf4' : '#fff7ed', borderLeft: `3px solid ${isSelected ? '#2563eb' : isLinked ? '#16a34a' : '#f97316'}`, transition: 'background 0.1s' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.4rem' }}>
                     <span style={{ fontSize: '0.8rem', fontWeight: isSelected ? 600 : 400, color: '#1e293b', lineHeight: 1.3, flex: 1 }}>
@@ -241,7 +244,7 @@ export default function VinculadorPage() {
                     </span>
                   </div>
                   <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '2px' }}>
-                    Meta: {Number(ins.meta_cantidad).toFixed(2)} {ins.unidad}
+                    Código: {ins.codigo} | Meta: {Number(ins.meta_cantidad).toFixed(2)} {ins.unidad}
                     {isLinked && <span style={{ color: '#16a34a', marginLeft: '6px' }}>• Adq: {Number(ins.adquirido).toFixed(2)}</span>}
                   </div>
                 </div>
@@ -252,7 +255,7 @@ export default function VinculadorPage() {
 
         {/* ── PANEL DERECHO: Compras ── */}
         <div style={{ border: '1px solid #cbd5e1', borderRadius: '8px', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'white' }}>
-          {!selectedInsumo ? (
+          {!selectedInsumoCodigo ? (
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '0.5rem', color: '#94a3b8' }}>
               <span style={{ fontSize: '2.5rem' }}>👈</span>
               <span>Selecciona un insumo para ver y gestionar sus vínculos</span>
@@ -262,7 +265,7 @@ export default function VinculadorPage() {
               {/* Header */}
               <div style={{ background: '#1d4ed8', color: 'white', padding: '0.65rem 1rem', flexShrink: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{selectedInsumo}</span>
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>{selectedInsumoNombre}</span>
                   <div style={{ display: 'flex', gap: '0.4rem', fontSize: '0.72rem' }}>
                     <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '10px', fontWeight: 600 }}>✅ {vinculadoCount}</span>
                     <span style={{ background: '#f1f5f9', color: '#475569', padding: '2px 8px', borderRadius: '10px' }}>⬜ {disponibleCount}</span>
@@ -351,8 +354,8 @@ export default function VinculadorPage() {
                             </td>
                             <td style={{ padding: '5px 8px', maxWidth: '280px' }}>
                               <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }} title={c.insumo_descripcion}>doc: {c.insumo_descripcion}</div>
-                              {selectedInsumo && (
-                                <div style={{ fontSize: '0.65rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={selectedInsumo}>{selectedInsumo}</div>
+                              {selectedInsumoNombre && (
+                                <div style={{ fontSize: '0.65rem', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={selectedInsumoNombre}>{selectedInsumoNombre}</div>
                               )}
                             </td>
                             <td style={{ padding: '5px 8px', textAlign: 'center', color: '#475569' }}>{c.unidad}</td>

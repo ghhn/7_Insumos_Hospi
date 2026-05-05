@@ -12,18 +12,20 @@ export async function GET(request: Request) {
   try {
     const client = await pool.connect();
     
-    // Fetch compras for the selected insumo
+    // Fetch compras for the selected insumo via mapeo_vinculacion
     const comprasQuery = `
-        SELECT id, orden_doc as "orden", detalle_compra as "detalle",
-               unidad_c as "unidad_orig", cant_c as "cant_orig",
-               COALESCE(unidad_und, unidad_c) as "unidad",
-               COALESCE(cantidad_und, cant_c) as "cantidad_und",
-               pu_c as "precio_orig",
-               pu_c as "precio_unit", total_c as "total",
-               observacion
-        FROM compras
-        WHERE insumo_descripcion = $1
-        ORDER BY id
+        SELECT c.id, c.num_compra as "orden", c.detalle as "detalle",
+               c.unidad as "unidad_orig", c.cantidad_c as "cant_orig",
+               COALESCE(c.unidad_und, c.unidad) as "unidad",
+               COALESCE(c.cantidad_und, c.cantidad_c) as "cantidad_und",
+               c.precio_unit_c as "precio_orig",
+               COALESCE(c.precio_und, c.precio_unit_c) as "precio_unit",
+               c.total_c as "total",
+               '' as observacion
+        FROM compras_c c
+        JOIN mapeo_vinculacion m ON c.id = m.compra_id
+        WHERE m.codigo_insumo = $1
+        ORDER BY c.id
     `;
     const comprasResult = await client.query(comprasQuery, [insumo]);
     client.release();
@@ -50,8 +52,8 @@ export async function POST(request: Request) {
       
       for (const update of updates) {
         await client.query(
-          'UPDATE compras SET unidad_und = $1, cantidad_und = $2 WHERE id = $3',
-          [update.unidad, update.cantidad_und, update.id]
+          'UPDATE compras_c SET unidad_und = $1, cantidad_und = $2, precio_und = $3 WHERE id = $4',
+          [update.unidad, update.cantidad_und, update.precio_unit, update.id]
         );
       }
       

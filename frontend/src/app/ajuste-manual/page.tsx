@@ -34,9 +34,10 @@ type Apu = {
 };
 
 export default function Home() {
-  const [insumosList, setInsumosList] = useState<string[]>([]);
+  const [insumosList, setInsumosList] = useState<{codigo: string, nombre: string}[]>([]);
   const [unitsList, setUnitsList] = useState<string[]>([]);
   const [selectedInsumo, setSelectedInsumo] = useState<string>('');
+  const [selectedInsumoName, setSelectedInsumoName] = useState<string>('');
   
   const [compras, setCompras] = useState<Compra[]>([]);
   const [apuData, setApuData] = useState<Apu[]>([]);
@@ -58,7 +59,7 @@ export default function Home() {
     if (!searchTerm.trim()) return insumosList.slice(0, 100); // Show first 100 if empty
     const terms = searchTerm.toLowerCase().split(/\s+/).filter(Boolean);
     return insumosList.filter(ins => {
-      const lowerIns = ins.toLowerCase();
+      const lowerIns = ins.nombre.toLowerCase() + " " + ins.codigo.toLowerCase();
       return terms.every(term => lowerIns.includes(term));
     }).slice(0, 100); // Limit to 100 results for performance
   }, [searchTerm, insumosList]);
@@ -84,16 +85,16 @@ export default function Home() {
   
   // Available names: APU name + any distinct names from the purchases
   const availableNames = useMemo(() => {
-    if (!selectedInsumo) return [];
+    if (!selectedInsumoName) return [];
     const names = new Set<string>();
-    names.add(selectedInsumo); // APU original
+    names.add(selectedInsumoName); // APU original
     compras.forEach(c => {
       if (c.detalle && c.detalle.trim() !== '') {
         names.add(c.detalle.trim());
       }
     });
     return Array.from(names);
-  }, [selectedInsumo, compras]);
+  }, [selectedInsumoName, compras]);
 
   // 1. Fetch metadata on load
   useEffect(() => {
@@ -118,7 +119,7 @@ export default function Home() {
       .then(res => res.json())
       .then(data => {
         setCompras(data);
-        setOfficialName(selectedInsumo); // Reset official name to current selected
+        setOfficialName(selectedInsumoName); // Reset official name to current selected
       });
       
     fetch(`/api/apu?insumo=${encodeURIComponent(selectedInsumo)}`)
@@ -127,7 +128,7 @@ export default function Home() {
         setApuData(data);
         setLoading(false);
       });
-  }, [selectedInsumo]);
+  }, [selectedInsumo, selectedInsumoName]);
 
   // Handle cell edits
   const handleEdit = (index: number, field: keyof Compra, value: string | number) => {
@@ -261,7 +262,7 @@ export default function Home() {
         body: JSON.stringify({ 
           updates: updatesApu,
           globalNameUpdate: {
-            oldName: selectedInsumo,
+            oldName: selectedInsumo, // using codigo_insumo as oldName identifier!
             newName: officialName
           }
         })
@@ -272,12 +273,12 @@ export default function Home() {
         setTimeout(() => setNotification(''), 4000);
         
         // Refresh the main list if name changed
-        if (officialName !== selectedInsumo) {
+        if (officialName !== selectedInsumoName) {
           fetch('/api/data')
             .then(res => res.json())
             .then(data => {
               setInsumosList(data.insumos || []);
-              setSelectedInsumo(officialName);
+              setSelectedInsumoName(officialName);
             });
         }
       } else {
@@ -302,9 +303,10 @@ export default function Home() {
               id="insumo-search"
               type="text" 
               placeholder="Ej: CEMENTO PORTLAND (Busca ambos términos)"
-              value={searchTerm || selectedInsumo} 
+              value={searchTerm || selectedInsumoName} 
               onChange={(e) => {
                 setSearchTerm(e.target.value);
+                if (selectedInsumoName) setSelectedInsumoName('');
                 setShowDropdown(true);
               }}
               onFocus={() => setShowDropdown(true)}
@@ -316,6 +318,7 @@ export default function Home() {
                 style={{background: '#64748b'}}
                 onClick={() => {
                   setSelectedInsumo('');
+                  setSelectedInsumoName('');
                   setSearchTerm('');
                 }}
               >
@@ -340,24 +343,26 @@ export default function Home() {
             }}>
               {filteredInsumos.map((ins, i) => (
                 <div 
-                  key={i} 
+                  key={ins.codigo} 
                   onClick={() => {
-                    setSelectedInsumo(ins);
-                    setSearchTerm(ins);
+                    setSelectedInsumo(ins.codigo);
+                    setSelectedInsumoName(ins.nombre);
+                    setSearchTerm('');
                     setShowDropdown(false);
                   }}
                   style={{
                     padding: '0.75rem 1rem',
                     cursor: 'pointer',
                     borderBottom: '1px solid #f1f5f9',
-                    background: selectedInsumo === ins ? '#eff6ff' : 'white',
-                    color: selectedInsumo === ins ? '#1e40af' : 'inherit',
-                    fontWeight: selectedInsumo === ins ? '600' : 'normal'
+                    background: selectedInsumo === ins.codigo ? '#eff6ff' : 'white',
+                    color: selectedInsumo === ins.codigo ? '#1e40af' : 'inherit',
+                    fontWeight: selectedInsumo === ins.codigo ? '600' : 'normal'
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = selectedInsumo === ins ? '#eff6ff' : 'white'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = selectedInsumo === ins.codigo ? '#eff6ff' : 'white'}
                 >
-                  {ins}
+                  <span style={{fontSize: '0.8rem', color: '#64748b', marginRight: '0.5rem'}}>{ins.codigo}</span>
+                  {ins.nombre}
                 </div>
               ))}
             </div>
@@ -387,8 +392,7 @@ export default function Home() {
           </div>
           
           <p style={{color: '#666', marginBottom: '1rem'}}>
-            Edita la <strong>Unidad</strong> y la <strong>Cantidad_Und</strong> para unificar y cuadrar las compras. 
-            El Precio Promedio Ponderado se recalcula en tiempo real.
+            Edita la <strong>Unidad</strong> y la <strong>Cantidad_Und</strong> para unificar y cuadrar las compras.
           </p>
 
           <div style={{marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderLeft: '4px solid var(--primary)'}}>
@@ -400,7 +404,7 @@ export default function Home() {
               style={{width: '100%', maxWidth: '600px'}}
             >
               {availableNames.map((name, i) => (
-                <option key={i} value={name}>{name} {name === selectedInsumo ? '(Actual en APU)' : '(De Compra)'}</option>
+                <option key={i} value={name}>{name} {name === selectedInsumoName ? '(Actual en APU)' : '(De Compra)'}</option>
               ))}
             </select>
           </div>
@@ -447,11 +451,8 @@ export default function Home() {
                     <th>Detalle</th>
                     <th>Unidad Orig.</th>
                     <th style={{textAlign: 'right'}}>Cant. Orig.</th>
-                    <th style={{textAlign: 'right'}}>Precio Orig.</th>
                     <th>Unidad (Editable)</th>
                     <th style={{textAlign: 'right'}}>Cantidad_Und (Editable)</th>
-                    <th style={{textAlign: 'right'}}>Precio Unit.</th>
-                    <th style={{textAlign: 'right'}}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -471,9 +472,6 @@ export default function Home() {
                           {compra.unidad_orig}
                         </td>
                         <td style={{textAlign: 'right'}}>{Number(compra.cant_orig).toFixed(4)}</td>
-                        <td style={{textAlign: 'right', color: '#64748b', fontSize: '0.9rem'}}>
-                          S/ {Number(compra.precio_orig).toFixed(2)}
-                        </td>
 
                         {/* EDITABLE UNIT */}
                         <td className="editable" style={{display: 'flex', alignItems: 'center', gap: '0.5rem', border: 'none', background: 'transparent'}}>
@@ -511,26 +509,6 @@ export default function Home() {
                             }}
                           />
                         </td>
-                        
-                        {/* EDITABLE PRICE UNIT (NEW) */}
-                        <td className="editable">
-                          <input 
-                            type="number" 
-                            step="0.0001"
-                            value={compra.precio_unit} 
-                            onChange={(e) => handleEdit(index, 'precio_unit', parseFloat(e.target.value) || 0)}
-                            style={{
-                              textAlign: 'right',
-                              background: !isMismatch ? '#f8fafc' : 'white',
-                              cursor: !isMismatch ? 'not-allowed' : 'text'
-                            }}
-                            disabled={!isMismatch}
-                          />
-                        </td>
-
-                        <td style={{textAlign: 'right', fontWeight: 'bold'}}>
-                          {(Number(compra.cantidad_und) * Number(compra.precio_unit)).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                        </td>
                       </tr>
                     );
                   })}
@@ -544,29 +522,8 @@ export default function Home() {
               <div className="metric-label" style={{ color: '#854d0e', fontWeight: 'bold' }}>Total Adquirido Válido</div>
               <div className="metric-value" style={{ color: '#713f12' }}>{totals.totalAdquirido.toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4})}</div>
             </div>
-            <div className="metric-card" style={{ opacity: 0.6 }}>
-              <div className="metric-label">Suma Total (Costo)</div>
-              <div className="metric-value">S/ {totals.sumaImporte.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
-            </div>
-            <div className="metric-card" style={{ background: '#fefce8', border: '2px solid #facc15', boxShadow: '0 4px 6px -1px rgba(234, 179, 8, 0.15)' }}>
-              <div className="metric-label" style={{ color: '#854d0e', fontWeight: 'bold' }}>Precio Promedio Ponderado</div>
-              <div className="metric-value" style={{ color: '#713f12' }}>S/ {totals.precioPromedio.toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4})}</div>
-            </div>
           </div>
-          
           <h2 style={{marginTop: '3rem'}}>📊 3. Edición de Incidencias (APU 2)</h2>
-
-          <div style={{marginBottom: '1.5rem', padding: '1.5rem', background: '#dcfce7', borderLeft: '4px solid #16a34a', borderRadius: '4px', border: '2px solid #22c55e'}}>
-            <div style={{display: 'flex', alignItems: 'center', gap: '1.5rem'}}>
-              <div>
-                <div style={{fontSize: '0.9rem', color: '#15803d', fontWeight: '600', marginBottom: '0.25rem'}}>✨ Precio Promedio Ponderado (PPP)</div>
-                <div style={{fontSize: '2rem', fontWeight: 'bold', color: '#166534'}}>S/ {totals.precioPromedio.toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4})}</div>
-              </div>
-              <div style={{fontSize: '0.85rem', color: '#15803d', fontStyle: 'italic', flex: 1}}>
-                Este es el precio unitario que se usará en el APU Nuevo Modificado para todos los APU de este insumo.
-              </div>
-            </div>
-          </div>
 
           <div style={{marginBottom: '1.5rem', padding: '1.5rem', background: '#eef2ff', borderLeft: '4px solid #4f46e5', borderRadius: '4px'}}>
             <label htmlFor="global-adquirido" style={{fontWeight: 'bold', display: 'block', marginBottom: '0.5rem', color: '#312e81'}}>
@@ -649,11 +606,8 @@ export default function Home() {
                   <th style={{textAlign: 'right'}}>Cantidad 1</th>
                   <th style={{textAlign: 'right'}}>Metrado Fijo</th>
                   <th style={{textAlign: 'right'}}>Parcial 1</th>
-                  <th style={{textAlign: 'right', color: '#64748b'}}>Precio Unit Orig.</th>
-                  <th style={{textAlign: 'right', background: '#e2e8f0', color: '#1e293b'}}>CANTIDAD 2</th>
+                  <th style={{textAlign: 'right', background: '#e2e8f0', color: '#1e293b'}}>CANTIDAD 2 (INCIDENCIA)</th>
                   <th style={{textAlign: 'right'}}>Parcial 2</th>
-                  <th style={{textAlign: 'right', background: '#dcfce7', color: '#166534', fontWeight: 'bold'}}>Precio Unit Nuevo</th>
-                  <th style={{textAlign: 'right', background: '#dcfce7', color: '#166534', fontWeight: 'bold'}}>Costo Total Nuevo</th>
                 </tr>
               </thead>
               <tbody>
@@ -683,11 +637,6 @@ export default function Home() {
                         <td style={{textAlign: 'right'}}>{Number(apu.metrado_fijo).toFixed(4)}</td>
                         <td style={{textAlign: 'right'}}>{Number(apu.parcial_1).toFixed(4)}</td>
 
-                        {/* PRECIO UNIT ORIGINAL */}
-                        <td style={{textAlign: 'right', color: '#64748b', fontSize: '0.9rem'}}>
-                          S/ {Number(apu.precio_unit_original).toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4})}
-                        </td>
-
                         {/* EDITABLE CANTIDAD 2 */}
                         <td className="editable" style={{border: '2px solid #94a3b8'}}>
                           <input
@@ -701,23 +650,13 @@ export default function Home() {
                         </td>
 
                         <td style={{textAlign: 'right', fontWeight: 'bold'}}>{parcial2.toFixed(4)}</td>
-
-                        {/* PRECIO UNIT NUEVO (PPP) */}
-                        <td style={{textAlign: 'right', fontWeight: 'bold', background: '#f0fdf4', color: '#166534'}}>
-                          S/ {totals.precioPromedio.toLocaleString('en-US', {minimumFractionDigits: 4, maximumFractionDigits: 4})}
-                        </td>
-
-                        {/* COSTO TOTAL NUEVO */}
-                        <td style={{textAlign: 'right', fontWeight: 'bold', background: '#dcfce7', color: '#166534'}}>
-                          S/ {costoTotalNuevo.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                        </td>
                       </tr>
                       {isExpanded && (
                         <tr>
                           <td colSpan={10} style={{padding: '0 1rem 1rem 1rem', background: '#f8fafc', borderBottom: '2px solid #cbd5e1'}}>
                             <ApuComparative 
                               codigoPartida={apu.codigo_partida} 
-                              selectedInsumoName={selectedInsumo}
+                              selectedInsumoName={selectedInsumoName}
                               modifiedIncidencia={Number(apu.cantidad_2)}
                               onIncidenciaChange={(val) => handleApuEdit(index, 'cantidad_2', val)}
                               onIncidenciaBlur={() => autoSaveApu(apu)}

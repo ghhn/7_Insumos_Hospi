@@ -12,20 +12,20 @@ export async function GET(request: Request) {
   try {
     const client = await pool.connect();
     
-    // Fetch rendition from apus_detallado
+    // Fetch rendition from partidas_p
     const rendRes = await client.query(
-      'SELECT DISTINCT "Partida_Rendimiento" FROM apus_detallado WHERE "Partida_Codigo" = $1 LIMIT 1',
+      'SELECT rendimiento_p as "Partida_Rendimiento" FROM partidas_p WHERE item = $1 LIMIT 1',
       [partida]
     );
     const rendimiento = rendRes.rows[0]?.Partida_Rendimiento || 'No especificado';
 
-    // Fetch all insumos for the APU from the insumos table
+    // Fetch all insumos for the APU from the acus table
     const query = `
-      SELECT id, descripcion, unidad, 
-             incidencia_original, parcial_original,
-             incidencia as cantidad_2
-      FROM insumos 
-      WHERE codigo_partida = $1
+      SELECT id, descripcion_insumo as descripcion, unidad, 
+             cantidad_p as incidencia_original, parcial_p as parcial_original,
+             cantidad_c as cantidad_2
+      FROM acus 
+      WHERE item_partida = $1
       ORDER BY id
     `;
     const result = await client.query(query, [partida]);
