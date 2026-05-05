@@ -31,24 +31,26 @@ Definidas en `resources/reglas_validacion.json`:
 ### Tablas Obligatorias
 | Tabla | Descripción |
 |-------|-------------|
-| `catalogo_partidas` | Catálogo maestro de partidas presupuestales |
-| `insumos` | Registro de insumos con cantidades |
-| `adquisiciones` | Compras registradas |
-| `metrados` | Planilla dinámica de metrados |
+| `partidas_p` | Catálogo maestro de partidas presupuestales (Inmutable) |
+| `insumos_p` | Catálogo unificado de recursos presupuestados (Inmutable) |
+| `acus` | **TABLA BASE DE VERDAD**: Desglose detallado de APUs. Define qué partidas y qué insumos existen realmente en el proyecto. |
+| `compras_c` | Registro físico de adquisiciones reales (Transaccional/Editable) |
+| `mapeo_vinculacion` | Tabla pivote que enlaza `compras_c` con `insumos_p`/`acus` |
 
 ### Columnas Críticas
 | Columna | Tipo Correcto | Tabla |
 |---------|--------------|-------|
-| `cantidad_estimada` | `NUMERIC(12,4)` | insumos |
-| `cantidad_adquirida` | `NUMERIC(12,4)` | insumos |
-| `cantidad_modificada` | `NUMERIC(12,4)` | insumos |
-| `metrado` | `NUMERIC(12,4)` | metrados |
-| `codigo_partida` | `TEXT` | catalogo_partidas |
+| `cantidad_p` | `NUMERIC(15,4)` | `partidas_p`, `insumos_p`, `acus` |
+| `cantidad_c` | `NUMERIC(15,4)` | `acus`, `compras_c` |
+| `item_partida` | `VARCHAR(50)` | `acus` |
+| `codigo_insumo` | `VARCHAR(50)` | `acus`, `insumos_p`, `mapeo_vinculacion` |
+| `cantidad_und` | `NUMERIC(15,4)` | `compras_c` |
 
-### Restricciones de Integridad
-- `cantidad_modificada` nunca puede superar `cantidad_adquirida`
-- `codigo_partida` debe seguir el patrón `OE.\d+\.\d+(\.\d+)?`
-- Las FK deben tener `ON DELETE RESTRICT` (no CASCADE en tablas principales)
+### Restricciones de Integridad y Lógica de Negocio
+- **`acus` es la fuente de verdad absoluta**: Si una partida existe en `acus` pero falta en `partidas_p`, se debe manejar como partida huérfana en el frontend (con metrado 0 y advertencia visual `[PARTIDA FALTANTE EN PRESUPUESTO]`) en lugar de ocultarla.
+- Nunca ocultar datos por falta de cruce (usar siempre `LEFT JOIN partidas_p`).
+- Toda tabla debe normalizarse sin duplicados exactos. Si existen duplicados en la BD (ej. el mismo insumo doble en un APU), las APIs deben agruparlos (`SUM` y `GROUP BY`) para evitar fallos de llaves en React.
+- La gestión de incidencias se controla estrictamente por CANTIDADES (`cantidad_c` vs `cantidad_p`), sin cruces de precios en las interfaces de ajuste.
 
 ## Parámetros de Entrada
 ```

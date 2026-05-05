@@ -21,12 +21,13 @@ export async function GET(request: Request) {
 
     // Fetch all insumos for the APU from the acus table
     const query = `
-      SELECT id, descripcion_insumo as descripcion, unidad, 
-             cantidad_p as incidencia_original, parcial_p as parcial_original,
-             cantidad_c as cantidad_2
+      SELECT MIN(id) as id, descripcion_insumo as descripcion, MAX(unidad) as unidad, 
+             SUM(cantidad_p) as incidencia_original, SUM(parcial_p) as parcial_original,
+             SUM(COALESCE(cantidad_c, cantidad_p)) as cantidad_2
       FROM acus 
       WHERE item_partida = $1
-      ORDER BY id
+      GROUP BY codigo_insumo, descripcion_insumo
+      ORDER BY MIN(id)
     `;
     const result = await client.query(query, [partida]);
     client.release();
