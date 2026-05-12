@@ -399,6 +399,134 @@ export async function GET() {
       rowNum4++;
     });
 
+    // ═══════════════════════════════════════════════════════════════
+    // HOJA 5: RESUMEN CON TOTALES Y P.U. PONDERADO
+    // ═══════════════════════════════════════════════════════════════
+    const resumenQuery = await client.query(`
+      SELECT
+        i.codigo_insumo, i.descripcion_insumo, i.unidad,
+        i.cantidad_requerida_p as cantidad_insumo, i.precio_p as precio_insumo,
+        c.id as compra_id, c.anio, c.tipo_compra, c.num_compra,
+        c.detalle as detalle_compra,
+        COALESCE(c.unidad_und, c.unidad) as unidad_compra,
+        COALESCE(c.cantidad_und, c.cantidad_c) as cantidad_compra,
+        COALESCE(c.precio_und, c.precio_unit_c) as precio_compra,
+        SUM(COALESCE(c.cantidad_und, c.cantidad_c)) OVER (PARTITION BY i.codigo_insumo) as total_adquirido,
+        SUM(COALESCE(c.cantidad_und, c.cantidad_c) * COALESCE(c.precio_und, c.precio_unit_c)) OVER (PARTITION BY i.codigo_insumo) as total_valor_adquirido,
+        COUNT(c.id) OVER (PARTITION BY i.codigo_insumo) as num_compras,
+        (i.cantidad_requerida_p * COUNT(c.id) OVER (PARTITION BY i.codigo_insumo)) as total_presupuestado
+      FROM insumos_resumen i
+      LEFT JOIN mapeo_vinculacion m ON i.codigo_insumo = m.codigo_insumo
+      LEFT JOIN compras_c c ON m.compra_id = c.id
+      ORDER BY i.codigo_insumo, i.descripcion_insumo, c.anio DESC, c.num_compra
+    `);
+
+    const ws5 = workbook.addWorksheet('5. Resumen Completo');
+    ws5.columns = [
+      { header: 'Código Insumo', key: 'codigo_insumo', width: 14 },
+      { header: 'Descripción Insumo', key: 'descripcion_insumo', width: 30 },
+      { header: 'Unidad', key: 'unidad', width: 10 },
+      { header: 'Cant d', key: 'cantidad_insumo', width: 10 },
+      { header: 'Precio', key: 'precio_insumo', width: 12 },
+      { header: 'ID Compra', key: 'compra_id', width: 10 },
+      { header: 'Año', key: 'anio', width: 8 },
+      { header: 'Tipo', key: 'tipo_compra', width: 10 },
+      { header: 'N° Documento', key: 'num_compra', width: 14 },
+      { header: 'Detalle Compra', key: 'detalle_compra', width: 28 },
+      { header: 'Unidad', key: 'unidad_compra', width: 10 },
+      { header: 'Cant ad', key: 'cantidad_compra', width: 10 },
+      { header: 'Precio', key: 'precio_compra', width: 12 },
+      { header: 'Total Presupuestado', key: 'total_presupuestado', width: 16 },
+      { header: 'Total Adquirido', key: 'total_adquirido', width: 14 },
+      { header: 'P.U. Ponderado', key: 'pu_ponderado', width: 14 },
+      { header: 'Precio Total Adquirido', key: 'precio_total_adquirido', width: 18 }
+    ];
+
+    const headerRow5 = ws5.getRow(1);
+    headerRow5.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+    headerRow5.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10 };
+    headerRow5.height = 25;
+    headerRow5.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+
+    let currentInsumo5 = '';
+    let rowNum5 = 2;
+    let useAlternado5 = false;
+    let startRowInsumo5 = 2;
+
+    resumenQuery.rows.forEach((row: any, idx: number) => {
+      // Si cambia el insumo, fusionar las celdas del insumo anterior
+      if (row.codigo_insumo !== currentInsumo5 && idx > 0) {
+        if (startRowInsumo5 < rowNum5) {
+          ws5.mergeCells(`N${startRowInsumo5}:N${rowNum5 - 1}`);
+          ws5.mergeCells(`O${startRowInsumo5}:O${rowNum5 - 1}`);
+          ws5.mergeCells(`P${startRowInsumo5}:P${rowNum5 - 1}`);
+          ws5.mergeCells(`Q${startRowInsumo5}:Q${rowNum5 - 1}`);
+        }
+        startRowInsumo5 = rowNum5;
+        currentInsumo5 = row.codigo_insumo;
+        useAlternado5 = !useAlternado5;
+      } else if (currentInsumo5 === '') {
+        currentInsumo5 = row.codigo_insumo;
+      }
+
+      const wsRow = ws5.getRow(rowNum5);
+
+      // Cálculos
+      const totalAdquirido = row.total_adquirido || 0;
+      const totalValorAdquirido = row.total_valor_adquirido || 0;
+      const puPonderado = totalAdquirido > 0 ? totalValorAdquirido / totalAdquirido : 0;
+      const precioTotalPorCompra = (row.cantidad_compra || 0) * (row.precio_compra || 0);
+
+      wsRow.values = {
+        codigo_insumo: row.codigo_insumo,
+        descripcion_insumo: row.descripcion_insumo,
+        unidad: row.unidad || '',
+        cantidad_insumo: row.cantidad_insumo || '',
+        precio_insumo: row.precio_insumo || '',
+        compra_id: row.compra_id || '',
+        anio: row.anio || '',
+        tipo_compra: row.tipo_compra || '',
+        num_compra: row.num_compra || '',
+        detalle_compra: row.detalle_compra || '',
+        unidad_compra: row.unidad_compra || '',
+        cantidad_compra: row.cantidad_compra || '',
+        precio_compra: row.precio_compra || '',
+        total_presupuestado: row.cantidad_insumo || '',
+        total_adquirido: totalAdquirido,
+        pu_ponderado: puPonderado,
+        precio_total_adquirido: totalValorAdquirido
+      };
+
+      const bgColor = useAlternado5 ? 'FFF0F4F8' : 'FFFFFFFF';
+      Array.from({ length: 17 }).forEach((_, colIdx) => {
+        const cell = wsRow.getCell(colIdx + 1);
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+        cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        addBorder(cell);
+
+        // Formato para números
+        if ([4, 5, 12, 13, 14, 15, 16, 17].includes(colIdx + 1)) {
+          cell.alignment = { horizontal: 'right', vertical: 'middle' };
+          cell.numFmt = '#,##0.0000';
+        }
+
+        // Alineación centrada para las celdas fusionadas
+        if ([14, 15, 16, 17].includes(colIdx + 1)) {
+          cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+      });
+
+      rowNum5++;
+    });
+
+    // Fusionar las celdas del último insumo
+    if (startRowInsumo5 < rowNum5) {
+      ws5.mergeCells(`N${startRowInsumo5}:N${rowNum5 - 1}`);
+      ws5.mergeCells(`O${startRowInsumo5}:O${rowNum5 - 1}`);
+      ws5.mergeCells(`P${startRowInsumo5}:P${rowNum5 - 1}`);
+      ws5.mergeCells(`Q${startRowInsumo5}:Q${rowNum5 - 1}`);
+    }
+
     // Enviar Excel
     const buffer = await workbook.xlsx.writeBuffer();
 
