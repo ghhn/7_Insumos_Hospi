@@ -90,7 +90,7 @@ export async function GET() {
         estadoCell.font = { color: { argb: 'FF92400E' }, bold: true };
       }
 
-      dataRow.alignment = { vertical: 'center' as const };
+      dataRow.alignment = { vertical: 'middle' as const };
     });
 
     // Freeze header
