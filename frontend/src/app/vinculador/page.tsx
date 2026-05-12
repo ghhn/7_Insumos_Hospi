@@ -9,6 +9,7 @@ type InsumoStat = {
   meta_cantidad: number;
   linked_count: number;
   adquirido: number;
+  precio?: number;
   es_extra?: number;
   total_registros: number;
 };
