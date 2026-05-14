@@ -11,6 +11,7 @@ type InsumoStat = {
   adquirido: number;
   es_extra?: number;
   total_registros: number;
+  precio?: number;
 };
 
 type CompraItem = {
