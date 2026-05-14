@@ -456,33 +456,33 @@ export default function VinculadorPage() {
 
               {/* Footer de Paginación */}
               {!loadingCompras && selectedInsumoCodigo && filteredCompras.length > 0 && (
-                <div style={{ borderTop: '1px solid #e2e8f0', background: '#f8fafc', padding: '0.4rem 0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', fontSize: '0.8rem', color: '#475569', flexShrink: 0 }}>
-                  <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                    <label style={{ fontWeight: 500 }}>Mostrar:</label>
+                <div style={{ borderTop: '1px solid #e2e8f0', background: '#f8fafc', padding: '0.25rem 0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem', fontSize: '0.7rem', color: '#475569', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                    <label style={{ fontWeight: 500, fontSize: '0.65rem' }}>Mostrar:</label>
                     <select value={rowsPerPage} onChange={(e) => { setRowsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-                      style={{ padding: '3px 6px', border: '1px solid #cbd5e1', borderRadius: '3px', background: '#fff', color: '#475569', cursor: 'pointer', fontSize: '0.75rem', fontWeight: 500 }}>
+                      style={{ padding: '2px 4px', border: '1px solid #cbd5e1', borderRadius: '3px', background: '#fff', color: '#475569', cursor: 'pointer', fontSize: '0.65rem', fontWeight: 500 }}>
                       <option value={100}>100 rows</option>
                       <option value={500}>500 rows</option>
                       <option value={1000}>1000 rows</option>
                     </select>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '0.2rem', alignItems: 'center' }}>
                     <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
-                      style={{ padding: '2px 5px', border: '1px solid #cbd5e1', borderRadius: '2px', background: currentPage === 1 ? '#f1f5f9' : '#fff', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', color: currentPage === 1 ? '#cbd5e1' : '#475569', fontSize: '0.7rem', fontWeight: 500 }}>
+                      style={{ padding: '1px 3px', border: '1px solid #cbd5e1', borderRadius: '2px', background: currentPage === 1 ? '#f1f5f9' : '#fff', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', color: currentPage === 1 ? '#cbd5e1' : '#475569', fontSize: '0.65rem', fontWeight: 500 }}>
                       ◀
                     </button>
-                    <span style={{ minWidth: '50px', textAlign: 'center', fontSize: '0.75rem' }}>
-                      Página <span style={{ fontWeight: 600 }}>{currentPage}</span> de <span style={{ fontWeight: 600 }}>{Math.ceil(filteredCompras.length / rowsPerPage)}</span>
+                    <span style={{ minWidth: '40px', textAlign: 'center', fontSize: '0.65rem' }}>
+                      <span style={{ fontWeight: 600 }}>{currentPage}</span>/<span style={{ fontWeight: 600 }}>{Math.ceil(filteredCompras.length / rowsPerPage)}</span>
                     </span>
                     <button onClick={() => setCurrentPage(Math.min(Math.ceil(filteredCompras.length / rowsPerPage), currentPage + 1))} disabled={currentPage === Math.ceil(filteredCompras.length / rowsPerPage)}
-                      style={{ padding: '2px 5px', border: '1px solid #cbd5e1', borderRadius: '2px', background: currentPage === Math.ceil(filteredCompras.length / rowsPerPage) ? '#f1f5f9' : '#fff', cursor: currentPage === Math.ceil(filteredCompras.length / rowsPerPage) ? 'not-allowed' : 'pointer', color: currentPage === Math.ceil(filteredCompras.length / rowsPerPage) ? '#cbd5e1' : '#475569', fontSize: '0.7rem', fontWeight: 500 }}>
+                      style={{ padding: '1px 3px', border: '1px solid #cbd5e1', borderRadius: '2px', background: currentPage === Math.ceil(filteredCompras.length / rowsPerPage) ? '#f1f5f9' : '#fff', cursor: currentPage === Math.ceil(filteredCompras.length / rowsPerPage) ? 'not-allowed' : 'pointer', color: currentPage === Math.ceil(filteredCompras.length / rowsPerPage) ? '#cbd5e1' : '#475569', fontSize: '0.65rem', fontWeight: 500 }}>
                       ▶
                     </button>
                   </div>
 
-                  <div style={{ fontSize: '0.75rem', fontWeight: 500 }}>
-                    Total: <span style={{ fontWeight: 600 }}>{filteredCompras.length}</span> registros
+                  <div style={{ fontSize: '0.65rem', fontWeight: 500 }}>
+                    Total: <span style={{ fontWeight: 600 }}>{filteredCompras.length}</span>
                   </div>
                 </div>
               )}
