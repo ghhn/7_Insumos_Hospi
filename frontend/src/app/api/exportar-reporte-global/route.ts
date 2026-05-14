@@ -8,28 +8,48 @@ export async function GET() {
 
     const result = await client.query(`
       SELECT 
-          i.codigo_insumo as codigo,
-          i.descripcion_insumo as nombre,
+          i.codigo as codigo,
+          i.descripcion as nombre,
           i.unidad,
           -- Meta Adquirido (Compras)
           COALESCE((
               SELECT SUM(COALESCE(c.cantidad_und, c.cantidad_c))
               FROM mapeo_vinculacion m
               JOIN compras_c c ON m.compra_id = c.id
-              WHERE m.codigo_insumo = i.codigo_insumo
+              WHERE m.codigo_insumo = i.codigo
           ), 0) as total_adquirido,
           -- Suma APU Modificada (Expediente)
           COALESCE((
               SELECT SUM(COALESCE(a.cantidad_c, a.cantidad_p) * COALESCE(p.cantidad_p, 0))
               FROM acus a
               LEFT JOIN partidas_p p ON a.item_partida = p.item
-              WHERE a.codigo_insumo = i.codigo_insumo
+              WHERE a.codigo_insumo = i.codigo
           ), 0) as suma_apu,
           COALESCE(e.estado, 'Pendiente') as estado,
           e.comentario
       FROM insumos_p i
-      LEFT JOIN estado_cuadre_insumos e ON i.codigo_insumo = e.codigo_insumo
-      ORDER BY i.descripcion_insumo
+      LEFT JOIN estado_cuadre_insumos e ON i.codigo = e.codigo_insumo
+      ORDER BY i.descripcion
+    `);
+
+    const apusResult = await client.query(`
+      SELECT 
+             a.codigo_insumo,
+             COALESCE(p.item, a.item_partida) as item,
+             COALESCE(MAX(p.descripcion), '[PARTIDA FALTANTE EN PRESUPUESTO]') as partida_desc,
+             COALESCE(MAX(p.cantidad_p), 0) as metrado_fijo,
+             MAX(i.descripcion) as descripcion_insumo,
+             SUM(a.cantidad_p) as incidencia_expediente,
+             (SUM(a.cantidad_p) * COALESCE(MAX(p.cantidad_p), 0)) as cantidad_expediente,
+             SUM(COALESCE(a.cantidad_c, a.cantidad_p)) as incidencia_modificada,
+             (SUM(COALESCE(a.cantidad_c, a.cantidad_p)) * COALESCE(MAX(p.cantidad_p), 0)) as cantidad_modificada,
+             MAX(e.comentario) as observaciones
+      FROM acus a
+      LEFT JOIN partidas_p p ON a.item_partida = p.item
+      LEFT JOIN insumos_p i ON a.codigo_insumo = i.codigo
+      LEFT JOIN estado_cuadre_insumos e ON a.codigo_insumo = e.codigo_insumo
+      GROUP BY a.item_partida, p.item, a.codigo_insumo
+      ORDER BY a.codigo_insumo, COALESCE(p.item, a.item_partida)
     `);
 
     client.release();
@@ -128,6 +148,104 @@ export async function GET() {
 
     // Freeze header
     worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    // -------------------------------------------------------------
+    // HOJA 2: DETALLE DE APUS
+    // -------------------------------------------------------------
+    const worksheetApu = workbook.addWorksheet('Detalle de APUs');
+
+    const headerApuBg = 'FF2563EB'; // Blue to match the image
+    const headerApuFont = { color: { argb: 'FFFFFFFF' }, bold: true, size: 10 };
+    const headerApuFill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: headerApuBg } };
+    const headerApuAlignment = { horizontal: 'center' as const, vertical: 'middle' as const, wrapText: true };
+
+    const headersApu = [
+      'Codigo Insumo',
+      'ITEM',
+      'PARTIDA',
+      'METRADO',
+      'Descripcion Insumo',
+      'INCIDENCIA SEGUN EXPEDIENTE',
+      'CANTIDAD SEGUN EXPEDIENTE',
+      'INCIDENCIA MODIFICADO',
+      'CANTIDAD MODIFICADA',
+      'VARIACION DE INCIDENCIA',
+      'VARIACION CANTIDAD',
+      'OBSERVACIONES'
+    ];
+    
+    const headerRowApu = worksheetApu.addRow(headersApu);
+    headerRowApu.font = headerApuFont;
+    headerRowApu.fill = headerApuFill;
+    headerRowApu.alignment = headerApuAlignment;
+    headerRowApu.height = 30;
+
+    worksheetApu.columns = [
+      { width: 15 },  // Codigo Insumo
+      { width: 15 },  // ITEM
+      { width: 45 },  // PARTIDA
+      { width: 12 },  // METRADO
+      { width: 55 },  // Descripcion Insumo
+      { width: 25 },  // INCIDENCIA SEGUN EXPEDIENTE
+      { width: 25 },  // CANTIDAD SEGUN EXPEDIENTE
+      { width: 25 },  // INCIDENCIA MODIFICADO
+      { width: 25 },  // CANTIDAD MODIFICADA
+      { width: 25 },  // VARIACION DE INCIDENCIA
+      { width: 25 },  // VARIACION CANTIDAD
+      { width: 35 }   // OBSERVACIONES
+    ];
+
+    apusResult.rows.forEach((row) => {
+      const inc_exp = Number(row.incidencia_expediente) || 0;
+      const cant_exp = Number(row.cantidad_expediente) || 0;
+      const inc_mod = Number(row.incidencia_modificada) || 0;
+      const cant_mod = Number(row.cantidad_modificada) || 0;
+      
+      const var_inc = inc_mod - inc_exp;
+      const var_cant = cant_mod - cant_exp;
+
+      const dataRow = worksheetApu.addRow([
+        row.codigo_insumo || '',
+        row.item || '',
+        row.partida_desc || '',
+        Number(row.metrado_fijo) || 0,
+        row.descripcion_insumo || '',
+        inc_exp,
+        cant_exp,
+        inc_mod,
+        cant_mod,
+        var_inc,
+        var_cant,
+        row.observaciones || ''
+      ]);
+
+      // Row fill matching the image (light orange/yellow)
+      dataRow.fill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFDE68A' } }; // yellow-200
+      
+      // Border lines
+      dataRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+      });
+
+      // Number formatting
+      dataRow.getCell(4).numFmt = '#,##0.00';
+      dataRow.getCell(6).numFmt = '#,##0.000000';
+      dataRow.getCell(7).numFmt = '#,##0.0000';
+      dataRow.getCell(8).numFmt = '#,##0.000000';
+      dataRow.getCell(9).numFmt = '#,##0.0000';
+      dataRow.getCell(10).numFmt = '#,##0.000000';
+      dataRow.getCell(11).numFmt = '#,##0.0000';
+
+      // Alignment
+      dataRow.alignment = { vertical: 'middle' as const };
+    });
+
+    worksheetApu.views = [{ state: 'frozen', ySplit: 1 }];
 
     const buffer = await workbook.xlsx.writeBuffer();
     const filename = `reporte-global-cuadre-${new Date().toISOString().split('T')[0]}.xlsx`;
