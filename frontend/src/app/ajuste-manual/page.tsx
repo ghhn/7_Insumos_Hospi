@@ -318,9 +318,62 @@ export default function Home() {
     }
   };
 
+  const exportToExcel = async () => {
+    if (!selectedInsumo) return;
+    try {
+      setNotification('⏳ Generando reporte Excel...');
+      const payload = {
+        insumoCodigo: selectedInsumo,
+        insumoNombre: selectedInsumoName,
+        estado: workflowState,
+        comentario: workflowComment,
+        globalAdquirido,
+        sumParcial2,
+        diff2,
+        precioPromedio: totals.precioPromedio,
+        compras,
+        apuData
+      };
+
+      const res = await fetch('/api/exportar-reporte-cuadre', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) throw new Error('Error al generar Excel');
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Reporte-Cuadre-${selectedInsumo}-${new Date().getTime()}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setNotification('✅ Reporte Excel descargado.');
+      setTimeout(() => setNotification(''), 3000);
+    } catch (e) {
+      setNotification('❌ Error al exportar a Excel.');
+      setTimeout(() => setNotification(''), 3000);
+    }
+  };
+
   return (
     <main className="container">
-      <h1>⚖️ Ajuste Manual y Cuadre de Adquisiciones</h1>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
+        <h1 style={{ margin: 0 }}>⚖️ Ajuste Manual y Cuadre de Adquisiciones</h1>
+        <button 
+          onClick={exportToExcel} 
+          disabled={!selectedInsumo}
+          className="btn"
+          style={{ background: !selectedInsumo ? '#cbd5e1' : '#10b981', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}
+        >
+          📥 Exportar Reporte a Excel
+        </button>
+      </div>
 
       <div className="card">
         <div className="selector-group" style={{ position: 'relative' }}>
