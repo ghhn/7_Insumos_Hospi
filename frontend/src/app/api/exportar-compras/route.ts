@@ -37,7 +37,7 @@ export async function GET() {
 
     // Header styling
     const headerBg = 'FF1d4ed8';
-    const headerFont = { color: 'FFFFFFFF', bold: true, size: 11 };
+    const headerFont = { color: { argb: 'FFFFFFFF' }, bold: true, size: 11 };
     const headerFill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: headerBg } };
     const headerAlignment = { horizontal: 'center' as const, vertical: 'center' as const, wrapText: true };
 
@@ -94,10 +94,10 @@ export async function GET() {
       const estadoCell = dataRow.getCell(10);
       if (row.estado === 'VINCULADO') {
         estadoCell.fill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFDCFCE7' } };
-        estadoCell.font = { color: 'FF166534', bold: true };
+        estadoCell.font = { color: { argb: 'FF166534' }, bold: true };
       } else {
         estadoCell.fill = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFF1F5F9' } };
-        estadoCell.font = { color: 'FF475569', bold: true };
+        estadoCell.font = { color: { argb: 'FF475569' }, bold: true };
       }
 
       dataRow.alignment = { vertical: 'center' as const };
