@@ -27,6 +27,52 @@ type APU = {
   precio_p: number;
 };
 
+const InsumoSelect = ({ apu, insumos, onChange }: { apu: APU, insumos: Insumo[], onChange: (codigo: string) => void }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const display = apu.codigo_insumo ? `${apu.codigo_insumo} - ${apu.descripcion_insumo}` : '-- Buscar Insumo --';
+  
+  return (
+    <div style={{ position: 'relative' }}>
+      <div 
+        onClick={() => setOpen(!open)}
+        style={{ padding: '6px', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', background: 'white', minHeight: '32px', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+      >
+        {display}
+      </div>
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'white', border: '1px solid #cbd5e1', zIndex: 50, maxHeight: '250px', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', borderRadius: '4px', marginTop: '2px' }}>
+          <input 
+            autoFocus
+            type="text" 
+            placeholder="Buscar código o descripción..." 
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ padding: '8px', borderBottom: '1px solid #cbd5e1', borderTop: 'none', borderLeft: 'none', borderRight: 'none', outline: 'none', width: '100%' }}
+          />
+          <div style={{ overflowY: 'auto', flex: 1 }}>
+            {insumos.filter(ins => ins.codigo.toLowerCase().includes(search.toLowerCase()) || ins.descripcion.toLowerCase().includes(search.toLowerCase())).slice(0, 100).map(ins => (
+              <div 
+                key={ins.codigo} 
+                onClick={() => { onChange(ins.codigo); setOpen(false); setSearch(''); }}
+                style={{ padding: '8px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', fontSize: '0.8rem' }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = '#f1f5f9')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'white')}
+              >
+                <strong>{ins.codigo}</strong> - {ins.descripcion}
+              </div>
+            ))}
+            {insumos.filter(ins => ins.codigo.toLowerCase().includes(search.toLowerCase()) || ins.descripcion.toLowerCase().includes(search.toLowerCase())).length === 0 && (
+              <div style={{ padding: '8px', color: '#94a3b8', fontSize: '0.8rem', textAlign: 'center' }}>No se encontraron insumos</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function EditorMaestro() {
   const [partidas, setPartidas] = useState<Partida[]>([]);
   const [insumosList, setInsumosList] = useState<Insumo[]>([]);
@@ -315,16 +361,11 @@ export default function EditorMaestro() {
                     {acus.map((apu, i) => (
                       <tr key={i} style={{ borderBottom: '1px solid #e2e8f0' }}>
                         <td style={{ padding: '10px' }}>
-                          <select 
-                            value={apu.codigo_insumo} 
-                            onChange={(e) => handleApuChange(i, 'codigo_insumo', e.target.value)}
-                            style={{ width: '100%', padding: '6px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
-                          >
-                            <option value="">-- Seleccionar Insumo --</option>
-                            {insumosList.map(ins => (
-                              <option key={ins.codigo} value={ins.codigo}>{ins.codigo} - {ins.descripcion}</option>
-                            ))}
-                          </select>
+                          <InsumoSelect 
+                            apu={apu}
+                            insumos={insumosList}
+                            onChange={(codigo) => handleApuChange(i, 'codigo_insumo', codigo)}
+                          />
                         </td>
                         <td style={{ padding: '10px' }}>{apu.unidad}</td>
                         <td style={{ padding: '10px' }}>
