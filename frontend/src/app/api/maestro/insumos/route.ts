@@ -16,7 +16,7 @@ export async function GET(request: Request) {
       queryParams.push(`%${q}%`);
     }
 
-    queryText += ` ORDER BY descripcion ASC LIMIT 100`;
+    queryText += ` ORDER BY descripcion ASC`;
 
     const result = await client.query(queryText, queryParams);
     client.release();

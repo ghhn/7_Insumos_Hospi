@@ -36,14 +36,20 @@ export default function EditorMaestro() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Autenticación
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+
   // Modal Nuevo Insumo
   const [showNewInsumo, setShowNewInsumo] = useState(false);
   const [newInsumoData, setNewInsumoData] = useState({ codigo: '', descripcion: '', unidad: '', costo_p: 0 });
 
   useEffect(() => {
-    fetchPartidas();
-    fetchInsumos();
-  }, []);
+    if (isAuthenticated) {
+      fetchPartidas();
+      fetchInsumos();
+    }
+  }, [isAuthenticated]);
 
   const fetchPartidas = async (q = '') => {
     const res = await fetch(`/api/maestro/partidas?q=${q}`);
@@ -61,7 +67,27 @@ export default function EditorMaestro() {
     setLoading(true);
     const res = await fetch(`/api/maestro/acus?partida=${item}`);
     const data = await res.json();
-    if (data.acus) setAcus(data.acus);
+    if (data.acus) {
+      setAcus(data.acus);
+      
+      // Asegurar que los insumos de los APUs existan en el dropdown
+      setInsumosList(prevList => {
+        const newList = [...prevList];
+        let changed = false;
+        data.acus.forEach((apu: APU) => {
+          if (apu.codigo_insumo && !newList.some(ins => ins.codigo === apu.codigo_insumo)) {
+            newList.push({
+              codigo: apu.codigo_insumo,
+              descripcion: apu.descripcion_insumo || '[Insumo no registrado en catálogo]',
+              unidad: apu.unidad || '',
+              costo_p: apu.precio_p || 0
+            });
+            changed = true;
+          }
+        });
+        return changed ? newList : prevList;
+      });
+    }
     setLoading(false);
   };
 
@@ -146,6 +172,37 @@ export default function EditorMaestro() {
       console.error(e);
     }
   };
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordInput === '1111') {
+      setIsAuthenticated(true);
+    } else {
+      alert('Contraseña incorrecta');
+    }
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+        <form onSubmit={handleLogin} style={{ background: 'white', padding: '40px', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', textAlign: 'center' }}>
+          <h2>Acceso Restringido</h2>
+          <p style={{ color: '#64748b', marginBottom: '20px' }}>Ingresa la contraseña para Editor Maestro</p>
+          <input 
+            type="password" 
+            value={passwordInput} 
+            onChange={e => setPasswordInput(e.target.value)} 
+            placeholder="Contraseña"
+            style={{ padding: '10px', width: '100%', marginBottom: '15px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+            autoFocus
+          />
+          <button type="submit" style={{ width: '100%', padding: '10px', background: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+            Ingresar
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="editor-maestro-container" style={{ display: 'flex', height: '100vh', padding: '20px', gap: '20px', background: '#f8fafc' }}>
