@@ -155,7 +155,10 @@ export default function ApuComparative({
             {insumos.map((ins, index) => {
               const cantOrig = Number(ins.incidencia_original) || 0;
               const parcialOrig = Number(ins.parcial_original) || 0;
-              const precioOrig = cantOrig > 0 ? (parcialOrig / cantOrig) : 0;
+              let precioOrig = cantOrig > 0 ? (parcialOrig / cantOrig) : 0;
+              if (ins.unidad.includes('%')) {
+                precioOrig = cantOrig > 0 ? (parcialOrig * 100) / cantOrig : 0;
+              }
 
               const isSelected = ins.descripcion === selectedInsumoName;
 
