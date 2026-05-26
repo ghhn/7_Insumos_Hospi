@@ -120,6 +120,137 @@ const generateDenominacionSheet = (workbook: ExcelJS.Workbook, sheetName: string
   });
 };
 
+const generatePreciosSheet = (workbook: ExcelJS.Workbook, sheetName: string, rows: any[]) => {
+  const wsPrecios = workbook.addWorksheet(sheetName);
+  
+  wsPrecios.columns = [
+    { width: 3 },    // A: Margen
+    { width: 15 },   // B: ITEMs / INSUMO
+    { width: 50 },   // C: PARTIDAS / Nombre
+    { width: 15 },   // D: Precios Viejos
+    { width: 15 },   // E: CAMBIO A:
+    { width: 15 },   // F: Precio Nuevo
+    { width: 45 }    // G: PONDERADO DE O/C / SUSTENTO
+  ];
+
+  // Título Principal
+  const titleRow = wsPrecios.getRow(2);
+  titleRow.values = ['', 'ESTANDARIZACION DE PRECIOS DE INSUMOS', '', '', '', '', ''];
+  wsPrecios.mergeCells('B2:G2');
+  titleRow.getCell(2).font = { bold: true, size: 10 };
+  titleRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+  titleRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF92FA92' } }; 
+  
+  for (let c = 2; c <= 7; c++) {
+    titleRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+  }
+  titleRow.height = 25;
+
+  // Cabecera Secundaria (Fila 3)
+  const headerRow = wsPrecios.getRow(3);
+  headerRow.values = ['', 'ITEMs', 'PARTIDAS', 'SUSTENTO', '', '', ''];
+  wsPrecios.mergeCells('D3:G3');
+  headerRow.font = { bold: true, size: 9 };
+  headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+  for (let c = 2; c <= 7; c++) {
+    headerRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    headerRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+  }
+  headerRow.height = 20;
+
+  // Agrupar datos por insumo
+  const insumosMap = new Map();
+  rows.forEach(row => {
+    if (!insumosMap.has(row.codigo_insumo)) {
+      insumosMap.set(row.codigo_insumo, {
+        nombre_oficial: row.nombre_oficial,
+        unidad: row.unidad,
+        precios_antiguos: new Set(),
+        total_parcial_mod: 0,
+        total_cant_mod: 0,
+        partidas: []
+      });
+    }
+    const ins = insumosMap.get(row.codigo_insumo);
+    if (row.precio_antiguo !== null && row.precio_antiguo !== undefined) {
+      ins.precios_antiguos.add(Number(row.precio_antiguo));
+    }
+    ins.total_parcial_mod += Number(row.parcial_mod) || 0;
+    ins.total_cant_mod += Number(row.cant_mod) || 0;
+    
+    ins.partidas.push({
+      item: row.partida_item,
+      desc: row.partida_desc
+    });
+  });
+
+  let currentRow = 4;
+
+  Array.from(insumosMap.values()).forEach((ins: any) => {
+    // Calculos
+    let preciosAntiguosStr = Array.from(ins.precios_antiguos).map(p => `S/ ${Number(p).toFixed(2)}`).join('\n');
+    let precioNuevo = ins.total_cant_mod > 0 ? ins.total_parcial_mod / ins.total_cant_mod : 0;
+    
+    if (ins.unidad && ins.unidad.includes('%')) {
+        precioNuevo = ins.total_cant_mod > 0 ? (ins.total_parcial_mod * 100) / ins.total_cant_mod : 0;
+    }
+
+    // Fila Padre del Insumo
+    const insumoRow = wsPrecios.getRow(currentRow);
+    insumoRow.values = ['', 'INSUMO', ins.nombre_oficial, preciosAntiguosStr, 'CAMBIO A:', `S/ ${precioNuevo.toFixed(2)}`, 'PONDERADO DE O/C'];
+    
+    insumoRow.font = { size: 9 };
+    insumoRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+    insumoRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    insumoRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    insumoRow.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+    insumoRow.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' };
+    insumoRow.getCell(7).alignment = { horizontal: 'center', vertical: 'middle' };
+    
+    const lightOrange = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFDE0C6' } };
+    const yellowFluor = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFD4FF00' } };
+    
+    insumoRow.getCell(2).fill = lightOrange;
+    insumoRow.getCell(3).fill = lightOrange; 
+    insumoRow.getCell(4).fill = lightOrange;
+    insumoRow.getCell(5).fill = yellowFluor;
+    insumoRow.getCell(6).fill = lightOrange;
+    insumoRow.getCell(7).fill = lightOrange;
+
+    for (let c = 2; c <= 7; c++) {
+      insumoRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+    }
+    
+    // Auto-ajustar altura por los saltos de línea en precios
+    insumoRow.height = Math.max(25, ins.precios_antiguos.size * 15);
+    
+    currentRow++;
+
+    const startSustentoRow = currentRow;
+
+    ins.partidas.forEach((p: any) => {
+      const partidaRow = wsPrecios.getRow(currentRow);
+      partidaRow.values = ['', p.item, p.desc, '', '', '', ''];
+      
+      partidaRow.font = { size: 9 };
+      partidaRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+      partidaRow.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+      
+      partidaRow.getCell(2).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      partidaRow.getCell(3).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      
+      currentRow++;
+    });
+
+    if (currentRow > startSustentoRow) {
+      wsPrecios.mergeCells(`D${startSustentoRow}:G${currentRow - 1}`);
+      const sustentoCell = wsPrecios.getCell(`D${startSustentoRow}`);
+      sustentoCell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      sustentoCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    }
+  });
+};
+
 export async function GET() {
   try {
     const client = await pool.connect();
@@ -156,12 +287,33 @@ export async function GET() {
       ORDER BY i.codigo, p.item
     `);
 
+    // 3. Precios de TODOS los insumos
+    const resultPrecios = await client.query(`
+      SELECT 
+             i.codigo as codigo_insumo,
+             MAX(a.descripcion_insumo) as nombre_oficial,
+             p.item as partida_item,
+             p.descripcion as partida_desc,
+             a.precio_p as precio_antiguo,
+             SUM(a.parcial_p) as parcial_orig,
+             SUM(a.cantidad_p) as cant_orig,
+             SUM(COALESCE(a.cantidad_c, a.cantidad_p)) as cant_mod,
+             SUM(COALESCE(a.parcial_c, a.parcial_p)) as parcial_mod,
+             MAX(a.unidad) as unidad
+      FROM acus a
+      JOIN insumos_p i ON a.codigo_insumo = i.codigo
+      LEFT JOIN partidas_p p ON a.item_partida = p.item
+      GROUP BY i.codigo, p.item, p.descripcion, a.precio_p
+      ORDER BY i.codigo, p.item
+    `);
+
     client.release();
 
     const workbook = new ExcelJS.Workbook();
     
     generateDenominacionSheet(workbook, 'E. DENOMINACION', resultCambiaron.rows);
     generateDenominacionSheet(workbook, 'E. DENOMINACION 2', resultNoCambiaron.rows);
+    generatePreciosSheet(workbook, 'E. PRECIOS', resultPrecios.rows);
 
     const buffer = await workbook.xlsx.writeBuffer();
     const filename = `formatos-actualizacion-${new Date().toISOString().split('T')[0]}.xlsx`;
