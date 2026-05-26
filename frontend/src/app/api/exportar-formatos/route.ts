@@ -34,34 +34,33 @@ export async function GET() {
     // Ancho de columnas para asimilarse a la imagen
     wsDenominacion.columns = [
       { width: 3 },    // A: Margen
-      { width: 16 },   // B: ITEMs / INSUMO
-      { width: 15 },   // C: PARTIDAS (parte 1)
-      { width: 35 },   // D: PARTIDAS (parte 2)
-      { width: 16 },   // E: CAMBIO A:
-      { width: 55 }    // F: SUSTENTO / Nuevo Nombre
+      { width: 15 },   // B: ITEMs / INSUMO
+      { width: 50 },   // C: PARTIDAS / Nombre Original
+      { width: 20 },   // D: CAMBIO A: / Recuadro
+      { width: 45 }    // E: SUSTENTO / Nuevo Nombre / Recuadro
     ];
 
-    // Título Principal (Filas 1 y 2 en la imagen, ocupando B2:F2 aprox)
+    // Título Principal
     const titleRow = wsDenominacion.getRow(2);
-    titleRow.values = ['', 'ESTANDARIZACION DE DENOMINACION DE INSUMOS', '', '', '', ''];
-    wsDenominacion.mergeCells('B2:F2');
+    titleRow.values = ['', 'ESTANDARIZACION DE DENOMINACION DE INSUMOS', '', '', ''];
+    wsDenominacion.mergeCells('B2:E2');
     titleRow.getCell(2).font = { bold: true, size: 10 };
     titleRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
     titleRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF92FA92' } }; // Verde Claro
     
     // Bordes para el título
-    for (let c = 2; c <= 6; c++) {
+    for (let c = 2; c <= 5; c++) {
       titleRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
     }
     titleRow.height = 25;
 
     // Cabecera Secundaria (Fila 3)
     const headerRow = wsDenominacion.getRow(3);
-    headerRow.values = ['', 'ITEMs', 'PARTIDAS', '', '', 'SUSTENTO'];
-    wsDenominacion.mergeCells('C3:E3');
+    headerRow.values = ['', 'ITEMs', 'PARTIDAS', 'SUSTENTO', ''];
+    wsDenominacion.mergeCells('D3:E3');
     headerRow.font = { bold: true, size: 9 };
     headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
-    for (let c = 2; c <= 6; c++) {
+    for (let c = 2; c <= 5; c++) {
       headerRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }; // Gris claro
       headerRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
     }
@@ -88,26 +87,25 @@ export async function GET() {
     Array.from(insumosMap.values()).forEach(ins => {
       // Fila Padre del Insumo
       const insumoRow = wsDenominacion.getRow(currentRow);
-      insumoRow.values = ['', 'INSUMO', ins.nombre_original, '', 'CAMBIO A:', ins.nombre_oficial];
-      wsDenominacion.mergeCells(`C${currentRow}:D${currentRow}`);
+      insumoRow.values = ['', 'INSUMO', ins.nombre_original, 'CAMBIO A:', ins.nombre_oficial];
       
       // Estilos Fila Insumo
       insumoRow.font = { size: 9 };
       insumoRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
       insumoRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-      insumoRow.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
-      insumoRow.getCell(6).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      insumoRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+      insumoRow.getCell(5).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
       
       // Colores según imagen
       const lightOrange = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFDE0C6' } };
       const yellowFluor = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFD4FF00' } };
       
       insumoRow.getCell(2).fill = lightOrange;
-      insumoRow.getCell(3).fill = lightOrange; // combinada C-D
-      insumoRow.getCell(5).fill = yellowFluor;
-      insumoRow.getCell(6).fill = lightOrange;
+      insumoRow.getCell(3).fill = lightOrange; 
+      insumoRow.getCell(4).fill = yellowFluor;
+      insumoRow.getCell(5).fill = lightOrange;
 
-      for (let c = 2; c <= 6; c++) {
+      for (let c = 2; c <= 5; c++) {
         insumoRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
       }
       
@@ -119,8 +117,7 @@ export async function GET() {
       // Filas Hijas (Partidas)
       ins.partidas.forEach((p: any) => {
         const partidaRow = wsDenominacion.getRow(currentRow);
-        partidaRow.values = ['', p.item, p.desc, '', '', ''];
-        wsDenominacion.mergeCells(`C${currentRow}:E${currentRow}`);
+        partidaRow.values = ['', p.item, p.desc, '', ''];
         
         partidaRow.font = { size: 9 };
         partidaRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
@@ -133,12 +130,18 @@ export async function GET() {
         currentRow++;
       });
 
-      // Combinar área de sustento para las partidas
+      // Combinar áreas de debajo de "CAMBIO A:" y "Nuevo Nombre"
       if (currentRow > startSustentoRow) {
-        wsDenominacion.mergeCells(`F${startSustentoRow}:F${currentRow - 1}`);
-        const sustentoCell = wsDenominacion.getCell(`F${startSustentoRow}`);
-        sustentoCell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
-        sustentoCell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+        // Columna D (Debajo de CAMBIO A:)
+        wsDenominacion.mergeCells(`D${startSustentoRow}:D${currentRow - 1}`);
+        const sustentoD = wsDenominacion.getCell(`D${startSustentoRow}`);
+        sustentoD.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+        
+        // Columna E (Debajo de Nuevo Nombre)
+        wsDenominacion.mergeCells(`E${startSustentoRow}:E${currentRow - 1}`);
+        const sustentoE = wsDenominacion.getCell(`E${startSustentoRow}`);
+        sustentoE.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+        sustentoE.alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
       }
     });
 
