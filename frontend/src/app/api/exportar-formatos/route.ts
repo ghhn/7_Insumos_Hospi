@@ -120,7 +120,7 @@ const generateDenominacionSheet = (workbook: ExcelJS.Workbook, sheetName: string
   });
 };
 
-const generatePreciosSheet = (workbook: ExcelJS.Workbook, sheetName: string, rows: any[]) => {
+const generatePreciosSheet = (workbook: ExcelJS.Workbook, sheetName: string, rows: any[], comprasRows: any[]) => {
   const wsPrecios = workbook.addWorksheet(sheetName);
   
   wsPrecios.columns = [
@@ -158,11 +158,21 @@ const generatePreciosSheet = (workbook: ExcelJS.Workbook, sheetName: string, row
   }
   headerRow.height = 20;
 
+  // Mapa de compras
+  const comprasMap = new Map();
+  comprasRows.forEach(c => {
+    if (!comprasMap.has(c.codigo_insumo)) comprasMap.set(c.codigo_insumo, new Set());
+    if (c.precio_und !== null && c.precio_und !== undefined) {
+       comprasMap.get(c.codigo_insumo).add(Number(c.precio_und));
+    }
+  });
+
   // Agrupar datos por insumo
   const insumosMap = new Map();
   rows.forEach(row => {
     if (!insumosMap.has(row.codigo_insumo)) {
       insumosMap.set(row.codigo_insumo, {
+        codigo_insumo: row.codigo_insumo,
         nombre_oficial: row.nombre_oficial,
         unidad: row.unidad,
         precios_antiguos: new Set(),
@@ -187,44 +197,53 @@ const generatePreciosSheet = (workbook: ExcelJS.Workbook, sheetName: string, row
   let currentRow = 4;
 
   Array.from(insumosMap.values()).forEach((ins: any) => {
-    // Calculos
-    let preciosAntiguosStr = Array.from(ins.precios_antiguos).map(p => `S/ ${Number(p).toFixed(2)}`).join('\n');
     let precioNuevo = ins.total_cant_mod > 0 ? ins.total_parcial_mod / ins.total_cant_mod : 0;
-    
     if (ins.unidad && ins.unidad.includes('%')) {
         precioNuevo = ins.total_cant_mod > 0 ? (ins.total_parcial_mod * 100) / ins.total_cant_mod : 0;
     }
 
-    // Fila Padre del Insumo
-    const insumoRow = wsPrecios.getRow(currentRow);
-    insumoRow.values = ['', 'INSUMO', ins.nombre_oficial, preciosAntiguosStr, 'CAMBIO A:', `S/ ${precioNuevo.toFixed(2)}`, 'PONDERADO DE O/C'];
-    
-    insumoRow.font = { size: 9 };
-    insumoRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
-    insumoRow.getCell(3).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    insumoRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-    insumoRow.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
-    insumoRow.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' };
-    insumoRow.getCell(7).alignment = { horizontal: 'center', vertical: 'middle' };
-    
-    const lightOrange = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFDE0C6' } };
-    const yellowFluor = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFD4FF00' } };
-    
-    insumoRow.getCell(2).fill = lightOrange;
-    insumoRow.getCell(3).fill = lightOrange; 
-    insumoRow.getCell(4).fill = lightOrange;
-    insumoRow.getCell(5).fill = yellowFluor;
-    insumoRow.getCell(6).fill = lightOrange;
-    insumoRow.getCell(7).fill = lightOrange;
-
-    for (let c = 2; c <= 7; c++) {
-      insumoRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+    // Definir los precios vinculados a usar
+    let preciosList = Array.from(comprasMap.get(ins.codigo_insumo) || new Set());
+    if (preciosList.length === 0) {
+       preciosList = Array.from(ins.precios_antiguos);
     }
-    
-    // Auto-ajustar altura por los saltos de línea en precios
-    insumoRow.height = Math.max(25, ins.precios_antiguos.size * 15);
-    
-    currentRow++;
+    if (preciosList.length === 0) preciosList = [0];
+
+    const startInsumoRow = currentRow;
+
+    preciosList.forEach((precio, idx) => {
+      const isFirst = idx === 0;
+      const insumoRow = wsPrecios.getRow(currentRow);
+      insumoRow.values = [
+        '', 
+        isFirst ? 'INSUMO' : '', 
+        isFirst ? ins.nombre_oficial : '', 
+        `S/ ${Number(precio).toFixed(2)}`, 
+        isFirst ? 'CAMBIO A:' : '', 
+        isFirst ? `S/ ${precioNuevo.toFixed(2)}` : '', 
+        isFirst ? 'PONDERADO DE O/C' : ''
+      ];
+      
+      insumoRow.font = { size: 9 };
+      const lightOrange = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFDE0C6' } };
+      const yellowFluor = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFD4FF00' } };
+      
+      for (let c = 2; c <= 7; c++) {
+        insumoRow.getCell(c).fill = (c === 5) ? yellowFluor : lightOrange;
+        insumoRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+        insumoRow.getCell(c).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      }
+      
+      currentRow++;
+    });
+
+    if (preciosList.length > 1) {
+       wsPrecios.mergeCells(`B${startInsumoRow}:B${currentRow - 1}`);
+       wsPrecios.mergeCells(`C${startInsumoRow}:C${currentRow - 1}`);
+       wsPrecios.mergeCells(`E${startInsumoRow}:E${currentRow - 1}`);
+       wsPrecios.mergeCells(`F${startInsumoRow}:F${currentRow - 1}`);
+       wsPrecios.mergeCells(`G${startInsumoRow}:G${currentRow - 1}`);
+    }
 
     const startSustentoRow = currentRow;
 
@@ -307,13 +326,20 @@ export async function GET() {
       ORDER BY i.codigo, p.item
     `);
 
+    // 4. Precios de compras vinculadas
+    const resultCompras = await client.query(`
+      SELECT m.codigo_insumo, c.precio_und
+      FROM mapeo_vinculacion m
+      JOIN compras_c c ON m.compra_id = c.id
+    `);
+
     client.release();
 
     const workbook = new ExcelJS.Workbook();
     
     generateDenominacionSheet(workbook, 'E. DENOMINACION', resultCambiaron.rows);
     generateDenominacionSheet(workbook, 'E. DENOMINACION 2', resultNoCambiaron.rows);
-    generatePreciosSheet(workbook, 'E. PRECIOS', resultPrecios.rows);
+    generatePreciosSheet(workbook, 'E. PRECIOS', resultPrecios.rows, resultCompras.rows);
 
     const buffer = await workbook.xlsx.writeBuffer();
     const filename = `formatos-actualizacion-${new Date().toISOString().split('T')[0]}.xlsx`;

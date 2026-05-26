@@ -484,32 +484,24 @@ export default function Home() {
             Edita la <strong>Unidad</strong> y la <strong>Cantidad_Und</strong> para unificar y cuadrar las compras.
           </p>
 
-          {/* 
           <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8fafc', borderLeft: '4px solid var(--primary)' }}>
-            <label htmlFor="official-name" style={{ fontWeight: 'bold', display: 'block', marginBottom: '0.5rem' }}>✏️ Definir Nombre Oficial del Insumo:</label>
+            <label htmlFor="official-name" style={{ fontWeight: 'bold', display: 'block', marginBottom: '0.5rem', color: '#94a3b8' }}>✏️ Definir Nombre Oficial del Insumo: (Inoperativo por seguridad)</label>
             <select
               id="official-name"
               value={officialName}
-              onChange={(e) => {
-                setOfficialName(e.target.value);
-                // Auto-save name
-                fetch('/api/apu', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ updates: [], globalNameUpdate: { oldName: selectedInsumo, newName: e.target.value } })
-                }).then(() => {
-                  setNotification('✅ Nombre oficial actualizado.');
-                  setTimeout(() => setNotification(''), 2000);
-                });
+              disabled
+              onChange={() => {
+                // CLAUSURADO PARA EVITAR DESFASES
+                setNotification('⚠️ El cambio de nombre está deshabilitado.');
+                setTimeout(() => setNotification(''), 2000);
               }}
-              style={{ width: '100%', maxWidth: '600px' }}
+              style={{ width: '100%', maxWidth: '600px', opacity: 0.6, cursor: 'not-allowed' }}
             >
               {availableNames.map((name, i) => (
                 <option key={i} value={name}>{name} {name === selectedInsumoName ? '(Actual en APU)' : '(De Compra)'}</option>
               ))}
             </select>
           </div>
-          */}
 
           {notification && (
             <div style={{
