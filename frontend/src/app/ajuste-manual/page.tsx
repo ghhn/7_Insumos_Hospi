@@ -361,29 +361,12 @@ export default function Home() {
     }
   };
 
-  const exportToExcelGlobal = async () => {
-    try {
-      setNotification('⏳ Generando reporte global Excel...');
-      const res = await fetch('/api/exportar-reporte-global');
+  const exportarGlobal = () => {
+    window.location.href = '/api/exportar-reporte-global';
+  };
 
-      if (!res.ok) throw new Error('Error al generar Excel');
-      
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Reporte-Global-Cuadre-${new Date().getTime()}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-
-      setNotification('✅ Reporte Global descargado.');
-      setTimeout(() => setNotification(''), 3000);
-    } catch (e) {
-      setNotification('❌ Error al exportar reporte global.');
-      setTimeout(() => setNotification(''), 3000);
-    }
+  const exportarFormatos = () => {
+    window.location.href = '/api/exportar-formatos';
   };
 
   return (
@@ -391,12 +374,11 @@ export default function Home() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', gap: '1rem', flexWrap: 'wrap' }}>
         <h1 style={{ margin: 0 }}>⚖️ Ajuste Manual y Cuadre de Adquisiciones</h1>
         <div style={{ display: 'flex', gap: '1rem' }}>
-          <button 
-            onClick={exportToExcelGlobal} 
-            className="btn"
-            style={{ background: '#3b82f6', color: 'white', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 'bold' }}
-          >
-            🌍 Exportar Reporte Global
+          <button onClick={exportarGlobal} style={{ background: '#10b981', color: 'white', padding: '0.5rem 1rem', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+            📥 Exportar Reporte Global
+          </button>
+          <button onClick={exportarFormatos} style={{ background: '#f59e0b', color: 'white', padding: '0.5rem 1rem', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', marginLeft: '0.5rem' }}>
+            📝 Exportar Formatos
           </button>
           <button 
             onClick={exportToExcel} 
