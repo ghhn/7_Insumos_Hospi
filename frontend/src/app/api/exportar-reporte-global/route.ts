@@ -66,7 +66,12 @@ export async function GET() {
              SUM(a.cantidad_p) as cant_orig,
              SUM(a.parcial_p) as parcial_orig,
              SUM(COALESCE(a.cantidad_c, a.cantidad_p)) as cant_mod,
-             SUM(COALESCE(a.parcial_c, a.parcial_p)) as parcial_mod
+             SUM(COALESCE(
+               a.parcial_c,
+               CASE WHEN a.cantidad_c IS NOT NULL
+                    THEN a.cantidad_c * COALESCE(a.precio_c, a.precio_p)
+                    ELSE a.parcial_p END
+             )) as parcial_mod
       FROM acus a
       LEFT JOIN partidas_p p ON a.item_partida = p.item
       GROUP BY p.item, p.descripcion, p.cantidad_p, p.rendimiento_p, a.codigo_insumo, a.descripcion_insumo, a.tipo

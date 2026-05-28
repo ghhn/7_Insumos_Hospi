@@ -140,7 +140,12 @@ export async function GET() {
           a.parcial_p       AS parcial_orig,
           COALESCE(a.cantidad_c, a.cantidad_p)  AS cant_nuevo,
           COALESCE(a.precio_c,   a.precio_p)    AS pu_nuevo,
-          COALESCE(a.parcial_c,  a.parcial_p)   AS parcial_nuevo,
+          COALESCE(
+            a.parcial_c,
+            CASE WHEN a.cantidad_c IS NOT NULL
+                 THEN a.cantidad_c * COALESCE(a.precio_c, a.precio_p)
+                 ELSE a.parcial_p END
+          )                                      AS parcial_nuevo,
           -- Specialty numeric sort key.
           -- Handles: "OE.3.1.1", "O.E.03.13", "10 O.E.03.13.06.03", "3.1.1.1", "10.3.8"
           -- Strategy: skip everything up to and including the last "O.E." / "OE." token,
