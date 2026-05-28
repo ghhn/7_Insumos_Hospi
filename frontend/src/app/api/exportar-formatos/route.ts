@@ -270,6 +270,192 @@ const generatePreciosSheet = (workbook: ExcelJS.Workbook, sheetName: string, row
   });
 };
 
+const generateUnidadesSheet = (workbook: ExcelJS.Workbook, sheetName: string, rows: any[]) => {
+  const ws = workbook.addWorksheet(sheetName);
+  
+  ws.columns = [
+    { width: 3 },    // A: Margen
+    { width: 15 },   // B: ITEMs / MATERIAL
+    { width: 50 },   // C: PARTIDAS / Nombre
+    { width: 15 },   // D: Unidad Antigua
+    { width: 15 },   // E: CAMBIO A:
+    { width: 15 },   // F: Unidad Nueva
+    { width: 45 }    // G: SUSTENTO
+  ];
+
+  const titleRow = ws.getRow(2);
+  titleRow.values = ['', 'ESTANDARIZACION DE UNIDADES DE INSUMOS', '', '', '', '', ''];
+  ws.mergeCells('B2:G2');
+  titleRow.getCell(2).font = { bold: true, size: 10 };
+  titleRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+  titleRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF92FA92' } }; 
+  for (let c = 2; c <= 7; c++) titleRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+  titleRow.height = 25;
+
+  const headerRow = ws.getRow(3);
+  headerRow.values = ['', 'ITEMs', 'PARTIDAS', '', '', '', 'SUSTENTO'];
+  headerRow.font = { bold: true, size: 9 };
+  headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+  for (let c = 2; c <= 7; c++) {
+    headerRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+    headerRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+  }
+  headerRow.height = 20;
+
+  const insumosMap = new Map();
+  rows.forEach(row => {
+    if (!insumosMap.has(row.codigo_insumo)) {
+      insumosMap.set(row.codigo_insumo, {
+        codigo_insumo: row.codigo_insumo,
+        nombre_oficial: row.nombre_oficial,
+        unidad_antigua: row.unidad_antigua,
+        unidad_nueva: row.unidad_nueva,
+        partidas: []
+      });
+    }
+    insumosMap.get(row.codigo_insumo).partidas.push({
+      item: row.partida_item,
+      desc: row.partida_desc
+    });
+  });
+
+  let currentRow = 4;
+  Array.from(insumosMap.values()).forEach((ins: any) => {
+    const isEquipo = String(ins.codigo_insumo).startsWith('03');
+    const tipoLabel = isEquipo ? 'EQUIPO:' : 'MATERIAL:';
+    
+    const insumoRow = ws.getRow(currentRow);
+    insumoRow.values = ['', tipoLabel, ins.nombre_oficial, ins.unidad_antigua, 'CAMBIO A:', ins.unidad_nueva, ''];
+    insumoRow.font = { size: 9 };
+    
+    const lightOrange = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFDE0C6' } };
+    const yellowFluor = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFD4FF00' } };
+    
+    insumoRow.getCell(2).fill = lightOrange;
+    insumoRow.getCell(3).fill = lightOrange;
+    insumoRow.getCell(4).fill = lightOrange;
+    insumoRow.getCell(5).fill = yellowFluor;
+    insumoRow.getCell(6).fill = lightOrange;
+
+    for (let c = 2; c <= 6; c++) {
+      insumoRow.getCell(c).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      insumoRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+    }
+    
+    const startSustentoRow = currentRow;
+    currentRow++;
+
+    ins.partidas.forEach((p: any) => {
+      const partidaRow = ws.getRow(currentRow);
+      partidaRow.values = ['', p.item, p.desc, '', '', '', ''];
+      partidaRow.font = { size: 9 };
+      partidaRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+      partidaRow.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+      partidaRow.getCell(2).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      partidaRow.getCell(3).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      currentRow++;
+    });
+
+    if (currentRow > startSustentoRow) {
+      ws.mergeCells(`G${startSustentoRow}:G${currentRow - 1}`);
+      const sustentoCell = ws.getCell(`G${startSustentoRow}`);
+      sustentoCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1F2D1' } };
+      sustentoCell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+    }
+  });
+};
+
+const generateIncidenciasSheet = (workbook: ExcelJS.Workbook, sheetName: string, rows: any[]) => {
+  const ws = workbook.addWorksheet(sheetName);
+  
+  ws.columns = [
+    { width: 3 },    // A
+    { width: 15 },   // B: ITEMs
+    { width: 50 },   // C: PARTIDAS
+    { width: 15 },   // D: INCIDENCIA ANT
+    { width: 15 },   // E: INCIDENCIA ACT
+    { width: 45 }    // F: SUSTENTO
+  ];
+
+  const titleRow = ws.getRow(2);
+  titleRow.values = ['', 'ACTUALIZACION DE INCIDENCIAS EN ACUs', '', '', '', ''];
+  ws.mergeCells('B2:F2');
+  titleRow.getCell(2).font = { bold: true, size: 10 };
+  titleRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+  titleRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF92FA92' } }; 
+  for (let c = 2; c <= 6; c++) titleRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+  titleRow.height = 25;
+
+  const insumosMap = new Map();
+  rows.forEach(row => {
+    if (!insumosMap.has(row.codigo_insumo)) {
+      insumosMap.set(row.codigo_insumo, {
+        codigo_insumo: row.codigo_insumo,
+        nombre_oficial: row.nombre_oficial,
+        unidad: row.unidad,
+        partidas: []
+      });
+    }
+    insumosMap.get(row.codigo_insumo).partidas.push({
+      item: row.partida_item,
+      desc: row.partida_desc,
+      incidencia_ant: row.incidencia_anterior,
+      incidencia_act: row.incidencia_actualizada
+    });
+  });
+
+  let currentRow = 4;
+  Array.from(insumosMap.values()).forEach((ins: any) => {
+    const insumoRow = ws.getRow(currentRow);
+    insumoRow.values = ['', ins.nombre_oficial, '', '', '', `UND: ${ins.unidad}`];
+    insumoRow.font = { bold: true, size: 9 };
+    ws.mergeCells(`B${currentRow}:E${currentRow}`);
+    const lightOrange = { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: 'FFFDE0C6' } };
+    
+    insumoRow.getCell(2).fill = lightOrange;
+    insumoRow.getCell(6).fill = lightOrange;
+    insumoRow.getCell(2).alignment = { horizontal: 'center', vertical: 'middle' };
+    insumoRow.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
+    
+    for (let c = 2; c <= 6; c++) insumoRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+    currentRow++;
+
+    const headerRow = ws.getRow(currentRow);
+    headerRow.values = ['', 'ITEMs', 'PARTIDAS', 'INCIDENCIA\nANTERIOR', 'INCIDENCIA\nACTUALIZADA', 'SUSTENTO'];
+    headerRow.font = { bold: true, size: 9 };
+    headerRow.height = 30;
+    
+    for (let c = 2; c <= 6; c++) {
+      headerRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDE0C6' } };
+      headerRow.getCell(c).alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      headerRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+    }
+    currentRow++;
+
+    const startSustentoRow = currentRow;
+
+    ins.partidas.forEach((p: any) => {
+      const partidaRow = ws.getRow(currentRow);
+      partidaRow.values = ['', p.item, p.desc, Number(p.incidencia_ant).toFixed(4), Number(p.incidencia_act).toFixed(4), ''];
+      partidaRow.font = { size: 9 };
+      partidaRow.getCell(2).alignment = { horizontal: 'left', vertical: 'middle' };
+      partidaRow.getCell(3).alignment = { horizontal: 'left', vertical: 'middle' };
+      partidaRow.getCell(4).alignment = { horizontal: 'center', vertical: 'middle' };
+      partidaRow.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
+      for (let c = 2; c <= 5; c++) partidaRow.getCell(c).border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      currentRow++;
+    });
+
+    if (currentRow > startSustentoRow) {
+      ws.mergeCells(`F${startSustentoRow}:F${currentRow - 1}`);
+      const sustentoCell = ws.getCell(`F${startSustentoRow}`);
+      sustentoCell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+      sustentoCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    }
+    currentRow++; 
+  });
+};
+
 export async function GET() {
   try {
     const client = await pool.connect();
@@ -333,13 +519,50 @@ export async function GET() {
       JOIN compras_c c ON m.compra_id = c.id
     `);
 
+    // 5. Unidades cambiadas
+    const resultUnidades = await client.query(`
+      SELECT 
+             i.codigo as codigo_insumo,
+             MAX(a.descripcion_insumo) as nombre_oficial,
+             p.item as partida_item,
+             p.descripcion as partida_desc,
+             i.unidad as unidad_antigua,
+             MAX(a.unidad) as unidad_nueva
+      FROM acus a
+      JOIN insumos_p i ON a.codigo_insumo = i.codigo
+      LEFT JOIN partidas_p p ON a.item_partida = p.item
+      WHERE LOWER(TRIM(i.unidad)) != LOWER(TRIM(a.unidad))
+      GROUP BY i.codigo, p.item, p.descripcion, i.unidad
+      ORDER BY i.codigo, p.item
+    `);
+
+    // 6. Incidencias cambiadas
+    const resultIncidencias = await client.query(`
+      SELECT 
+             i.codigo as codigo_insumo,
+             MAX(a.descripcion_insumo) as nombre_oficial,
+             MAX(a.unidad) as unidad,
+             p.item as partida_item,
+             p.descripcion as partida_desc,
+             a.cantidad_p as incidencia_anterior,
+             a.cantidad_c as incidencia_actualizada
+      FROM acus a
+      JOIN insumos_p i ON a.codigo_insumo = i.codigo
+      LEFT JOIN partidas_p p ON a.item_partida = p.item
+      WHERE COALESCE(a.cantidad_p,0) != COALESCE(a.cantidad_c,0) AND a.cantidad_c IS NOT NULL
+      GROUP BY i.codigo, p.item, p.descripcion, a.cantidad_p, a.cantidad_c
+      ORDER BY i.codigo, p.item
+    `);
+
     client.release();
 
     const workbook = new ExcelJS.Workbook();
     
-    generateDenominacionSheet(workbook, 'E. DENOMINACION', resultCambiaron.rows);
-    generateDenominacionSheet(workbook, 'E. DENOMINACION 2', resultNoCambiaron.rows);
+    // generateDenominacionSheet(workbook, 'E. DENOMINACION', resultCambiaron.rows);
+    generateDenominacionSheet(workbook, 'E. DENOMINACION', resultNoCambiaron.rows);
     generatePreciosSheet(workbook, 'E. PRECIOS', resultPrecios.rows, resultCompras.rows);
+    generateUnidadesSheet(workbook, 'E. UNIDADES', resultUnidades.rows);
+    generateIncidenciasSheet(workbook, 'ACT. DE INCIDENCIAS', resultIncidencias.rows);
 
     const buffer = await workbook.xlsx.writeBuffer();
     const filename = `formatos-actualizacion-${new Date().toISOString().split('T')[0]}.xlsx`;
