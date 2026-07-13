@@ -1,9 +1,15 @@
 # 📘 DOCUMENTACIÓN COMPLETA - SISTEMA DE CONTROL Y AJUSTE DE INSUMOS
 ## Proyecto: Belempampa (Administración Directa)
 
-**Última actualización**: 25 de mayo de 2026  
+**Última actualización**: 25 de mayo de 2026 (Actualización de Migración: Julio 2026)  
 **Versión**: 3.0 - Documento Consolidado  
 **Estado**: ✅ Listo para Producción
+
+> [!WARNING]
+> **MIGRACIÓN ARQUITECTÓNICA (Julio 2026)**:
+> La base de datos original descrita en este documento ha sido migrada a un modelo `_p` (Presupuestado) y `_c` (Compras/Transaccional). Las tablas listadas en la Sección 7 (`partidas`, `insumos`, `compras`, `apus_detallado`) **ya no existen** y fueron reemplazadas.
+> 
+> 👉 **Para ver el modelo de datos actual y correcto, consulta el archivo `SQL_Architecture_Master_Guide.md`.** Toda la lógica de negocio descrita aquí sigue siendo válida conceptualmente, pero las consultas SQL deben usar las nuevas tablas.
 
 ---
 
