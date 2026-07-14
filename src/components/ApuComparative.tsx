@@ -14,14 +14,14 @@ export default function ApuComparative({
   codigoPartida,
   selectedInsumoName,
   modifiedIncidencia,
-  ppp,
+  ppp = 0,
   onIncidenciaChange,
   onIncidenciaBlur
 }: {
   codigoPartida: string;
   selectedInsumoName: string;
   modifiedIncidencia: number;
-  ppp: number;
+  ppp?: number;
   onIncidenciaChange: (val: number) => void;
   onIncidenciaBlur?: () => void;
 }) {

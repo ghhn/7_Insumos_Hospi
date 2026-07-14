@@ -313,7 +313,7 @@ export default function EstandarizadorClient({ initialInsumos }: { initialInsumo
                       <span style={{ background: '#f8f9fa', padding: '1px 4px', borderRadius: '3px', fontSize: '11px', border: '1px solid #eee' }}>{item.unidad}</span>
                     </td>
                     <td style={{ textAlign: 'right', fontSize: '11px', padding: '4px' }}>{parseFloat(item.cantidad).toFixed(2)}</td>
-                    <td style={{ textAlign: 'right', fontSize: '11px', padding: '4px', color: '#2563eb', fontWeight: 'bold' }}>S/ {parseFloat(item.costo || 0).toFixed(2)}</td>
+                    <td style={{ textAlign: 'right', fontSize: '11px', padding: '4px', color: '#2563eb', fontWeight: 'bold' }}>S/ {Number(item.costo ?? 0).toFixed(2)}</td>
                     <td style={{ textAlign: 'center', padding: '4px' }}>
                       {isHomologated ? (
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>
