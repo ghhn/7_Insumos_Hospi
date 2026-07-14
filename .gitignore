@@ -1,37 +1,41 @@
-# Base de datos local y backups
-*.sql
-*.json
-*.csv
-*.xlsx
-~$*.xlsx
-*.xls
-*.zip
-backup/
-DATA_LAST/
-ANALISIS_Y_PROPUESTAS/
-"Nueva carpeta/"
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Dependencias root
-node_modules/
-package-lock.json
-package.json
-skills-lock.json
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-# Scripts temporales de validación
-check_*.py
-evaluar_*.py
-analizar_*.py
-delete_*.py
-unlink_*.py
-update_*.py
-scratch/
-insert*.js
-debug*.js
-data-analyzer.js
+# testing
+/coverage
 
-# Agentes
-.claude/
-.agents/
+# next.js
+/.next/
+/out/
 
-# Supabase CLI local
-supabase/.temp/
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
