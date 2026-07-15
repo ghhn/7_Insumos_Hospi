@@ -292,7 +292,7 @@ export default function EditorPartidas() {
                   <button 
                     type="button" 
                     onClick={() => {
-                      setEditForm({...selectedPartida});
+                      setEditForm(selectedPartida ? {...selectedPartida} : null);
                     }}
                     style={{ padding: '10px 20px', borderRadius: '6px', border: '1px solid #cbd5e1', background: 'white', color: '#475569', fontWeight: 600, cursor: 'pointer' }}
                   >
