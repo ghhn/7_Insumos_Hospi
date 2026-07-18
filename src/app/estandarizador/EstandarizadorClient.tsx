@@ -17,6 +17,7 @@ type Insumo = {
   similitud_ia_porcentaje?: number;
   grupo_ia_sugerido?: string;
   precio_ponderado_c?: string;
+  linked_count?: string | number;
 };
 
 const getSimilitudColor = (porcentaje: number) => {
@@ -184,6 +185,13 @@ export default function EstandarizadorClient({ initialInsumos }: { initialInsumo
 
   const handleMerge = async () => {
     if (selectedItems.length === 0) return;
+    
+    const hasLinkedItems = selectedItems.some(i => Number(i.linked_count || 0) > 0);
+    if (hasLinkedItems) {
+      const confirmMsg = "Atención: Algunos de los insumos brutos que vas a estandarizar/fusionar YA TIENEN compras vinculadas en el Vinculador.\n\nSi procedes, estas compras se migrarán automáticamente al nuevo insumo estandarizado para no perder los vínculos.\n\n¿Estás seguro de continuar?";
+      if (!window.confirm(confirmMsg)) return;
+    }
+    
     setIsSubmitting(true);
     try {
       const payload = {
