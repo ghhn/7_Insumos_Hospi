@@ -22,7 +22,8 @@ export default async function EstandarizadorPage() {
         est.descripcion_estandar,
         est.unidad_estandar,
         est.precio_ponderado_c,
-        agr.factor_conversion
+        agr.factor_conversion,
+        (SELECT COUNT(*) FROM mapeo_vinculacion m WHERE m.codigo_insumo = p.numero) as linked_count
       FROM insumos_p p
       LEFT JOIN agrupacion_insumos_c agr ON p.numero = agr.numero_insumo_original
       LEFT JOIN insumos_estandarizados_c est ON agr.codigo_estandar_fk = est.id

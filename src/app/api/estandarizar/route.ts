@@ -97,6 +97,13 @@ export async function POST(req: Request) {
         }
       }
 
+      // 5. MIGRAR VÍNCULOS de insumos brutos al nuevo estandarizado
+      await client.query(`
+        UPDATE mapeo_vinculacion 
+        SET codigo_insumo = $1 
+        WHERE codigo_insumo = ANY($2::text[])
+      `, [codigo_estandar, insumosNumeros]);
+
       await client.query('COMMIT');
       return NextResponse.json({ success: true, estandarId });
     } catch (e) {

@@ -35,7 +35,28 @@ export async function GET(request: Request) {
         FROM insumos_estandarizados_c e
         LEFT JOIN mapeo_vinculacion m ON e.codigo_estandar = m.codigo_insumo
         GROUP BY e.id, e.codigo_estandar, e.descripcion_estandar, e.unidad_estandar, e.precio_ponderado_c
-        ORDER BY e.descripcion_estandar
+        
+        UNION ALL
+        
+        SELECT
+          p.numero as codigo,
+          p.descripcion as nombre,
+          p.unidad as unidad,
+          p.cantidad_insumo_p as meta_cantidad,
+          p.costo_p as precio,
+          (SELECT COUNT(*) FROM mapeo_vinculacion m WHERE m.codigo_insumo = p.numero) as linked_count,
+          COALESCE((
+            SELECT SUM(c.cantidad_und) 
+            FROM mapeo_vinculacion m2 
+            JOIN compras_c c ON m2.compra_id = c.id 
+            WHERE m2.codigo_insumo = p.numero
+          ), 0) as adquirido,
+          0 as es_extra,
+          1 as total_registros
+        FROM insumos_p p
+        WHERE p.numero NOT IN (SELECT numero_insumo_original FROM agrupacion_insumos_c)
+        
+        ORDER BY nombre
       `);
 
       const unlinkedResult = await client.query(`
@@ -55,7 +76,10 @@ export async function GET(request: Request) {
           COALESCE(c.unidad_und, c.unidad) as unidad, 
           COALESCE(c.cantidad_und, c.cantidad_c) as cantidad, 
           (SELECT COUNT(*) FROM mapeo_vinculacion m WHERE m.compra_id = c.id) as linked_count,
-          (SELECT e.descripcion_estandar FROM mapeo_vinculacion m2 JOIN insumos_estandarizados_c e ON m2.codigo_insumo = e.codigo_estandar WHERE m2.compra_id = c.id LIMIT 1) as vinculado_a,
+          COALESCE(
+            (SELECT e.descripcion_estandar FROM mapeo_vinculacion m2 JOIN insumos_estandarizados_c e ON m2.codigo_insumo = e.codigo_estandar WHERE m2.compra_id = c.id LIMIT 1),
+            (SELECT p.descripcion FROM mapeo_vinculacion m2 JOIN insumos_p p ON m2.codigo_insumo = p.numero WHERE m2.compra_id = c.id LIMIT 1)
+          ) as vinculado_a,
           c.num_compra,
           c.tipo_compra,
           c.anio,
@@ -92,7 +116,29 @@ export async function GET(request: Request) {
           END as estado
         FROM insumos_estandarizados_c e
         LEFT JOIN mapeo_vinculacion m ON e.codigo_estandar = m.codigo_insumo AND m.compra_id = $1
-        ORDER BY e.descripcion_estandar
+        
+        UNION ALL
+        
+        SELECT 
+          p.numero as codigo,
+          p.descripcion as nombre,
+          p.unidad as unidad,
+          p.cantidad_insumo_p as meta_cantidad,
+          COALESCE((
+            SELECT SUM(c2.cantidad_und) 
+            FROM mapeo_vinculacion m2 
+            JOIN compras_c c2 ON m2.compra_id = c2.id 
+            WHERE m2.codigo_insumo = p.numero
+          ), 0) as adquirido,
+          CASE 
+            WHEN m.id IS NOT NULL THEN 'vinculado'
+            ELSE 'disponible'
+          END as estado
+        FROM insumos_p p
+        LEFT JOIN mapeo_vinculacion m ON p.numero = m.codigo_insumo AND m.compra_id = $1
+        WHERE p.numero NOT IN (SELECT numero_insumo_original FROM agrupacion_insumos_c)
+        
+        ORDER BY nombre
       `, [compraId]);
       
       // Check if this compra is linked to anything at all
@@ -115,6 +161,14 @@ export async function GET(request: Request) {
           ), 0) as meta_cantidad
         FROM insumos_estandarizados_c e
         WHERE e.codigo_estandar = $1
+        
+        UNION ALL
+        
+        SELECT
+          p.unidad as unidad,
+          p.cantidad_insumo_p as meta_cantidad
+        FROM insumos_p p
+        WHERE p.numero = $1
       `, [insumo]);
 
       const adquiridoResult = await client.query(`
@@ -142,7 +196,10 @@ export async function GET(request: Request) {
               WHEN EXISTS (SELECT 1 FROM mapeo_vinculacion m2 WHERE m2.compra_id = c.id) THEN 'bloqueado'
               ELSE 'disponible'
           END as estado,
-          (SELECT e.descripcion_estandar FROM mapeo_vinculacion m2 JOIN insumos_estandarizados_c e ON m2.codigo_insumo = e.codigo_estandar WHERE m2.compra_id = c.id LIMIT 1) as vinculado_a
+          COALESCE(
+            (SELECT e.descripcion_estandar FROM mapeo_vinculacion m2 JOIN insumos_estandarizados_c e ON m2.codigo_insumo = e.codigo_estandar WHERE m2.compra_id = c.id LIMIT 1),
+            (SELECT p.descripcion FROM mapeo_vinculacion m2 JOIN insumos_p p ON m2.codigo_insumo = p.numero WHERE m2.compra_id = c.id LIMIT 1)
+          ) as vinculado_a
         FROM compras_c c
         ORDER BY c.id DESC
       `, [insumo]);
