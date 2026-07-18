@@ -37,10 +37,15 @@ async function main() {
   // Greedy Clustering using 'numero' as the unique identifier
   const groups = []; // Array of Sets (storing 'numero')
   const itemToGroupIndex = new Map(); // Maps 'numero' to group index
+  const itemToMaxSim = new Map(); // Maps 'numero' to highest similarity percentage
 
   for (const pair of pairs) {
     const num1 = pair.num_1;
     const num2 = pair.num_2;
+    const sim = parseFloat(pair.sim);
+    
+    itemToMaxSim.set(num1, Math.max(itemToMaxSim.get(num1) || 0, sim));
+    itemToMaxSim.set(num2, Math.max(itemToMaxSim.get(num2) || 0, sim));
     
     const idx1 = itemToGroupIndex.get(num1);
     const idx2 = itemToGroupIndex.get(num2);
@@ -71,37 +76,79 @@ async function main() {
       const newGroupIndex = groups.length;
       groups.push(new Set([item.numero]));
       itemToGroupIndex.set(item.numero, newGroupIndex);
+      itemToMaxSim.set(item.numero, 100); // 100% sim with itself
     }
   }
+
+  console.log("Calculando promedios ponderados y actualizando BD...");
+  
+  // Sort groups so that groups with multiple items appear first, then singletons
+  groups.sort((a, b) => b.size - a.size);
+
+  const updates = [];
+  const groupMetadata = new Map(); // Maps group object reference to { name, avgPrice }
+
+  for (const group of groups) {
+    if (group.size === 0) continue;
+    
+    const arr = Array.from(group);
+    // The predefined name is the description of the FIRST item in the group
+    const firstItem = itemInfo.get(arr[0]);
+    const groupName = firstItem.descripcion;
+    
+    let totalValue = 0;
+    let totalQty = 0;
+    
+    for (const numero of group) {
+      const item = itemInfo.get(numero);
+      const qty = parseFloat(item.cantidad_insumo_p) || 0;
+      const cost = parseFloat(item.costo_p) || 0;
+      totalValue += (qty * cost);
+      totalQty += qty;
+    }
+    
+    const avgPrice = totalQty > 0 ? (totalValue / totalQty) : 0;
+    groupMetadata.set(group, { name: groupName, avgPrice });
+    
+    for (const numero of group) {
+      const sim = itemToMaxSim.get(numero);
+      updates.push(
+        pool.query('UPDATE insumos_p SET similitud_ia_porcentaje = $1, grupo_ia_sugerido = $2 WHERE numero = $3', [sim, groupName, numero])
+      );
+    }
+  }
+
+  // Execute all updates in parallel
+  await Promise.all(updates);
+  console.log(`✅ Base de datos actualizada con porcentajes de IA en ${updates.length} insumos.`);
 
   // Generate output as Native Excel (.xlsx)
   const xlsx = require('xlsx');
   
   // Create worksheet data with all columns
   const wsData = [
-    ["Grupo ID", "N°", "Descripción Original", "Unidad", "Cantidad", "Costo Unitario", "Parcial (Total)", "Tipo"] // Headers
+    ["Grupo Sugerido IA", "N° Original", "Descripción Original", "Unidad", "Cantidad", "Costo Unitario", "Parcial (Total)", "Tipo", "% Coincidencia", "Promedio Ponderado Grupo"] // Headers
   ];
-
-  let groupId = 1;
-  // Sort groups so that groups with multiple items appear first, then singletons
-  groups.sort((a, b) => b.size - a.size);
 
   for (const group of groups) {
     if (group.size > 0) { // Include all groups, even size 1
+      const meta = groupMetadata.get(group);
       for (const numero of group) {
         const itemObj = itemInfo.get(numero);
+        const sim = itemToMaxSim.get(numero);
         wsData.push([
-          `Grupo ${groupId}`, 
+          meta.name, 
           numero, 
           itemObj.descripcion,
           itemObj.unidad,
           itemObj.cantidad_insumo_p,
           itemObj.costo_p,
           itemObj.total_p,
-          itemObj.tipo
+          itemObj.tipo,
+          `${sim}%`,
+          meta.avgPrice
         ]);
       }
-      groupId++;
     }
   }
 
@@ -111,21 +158,23 @@ async function main() {
 
   // Auto-fit column widths (approximate)
   ws['!cols'] = [
-    { wch: 15 }, // Grupo ID
+    { wch: 60 }, // Grupo Nombre
     { wch: 10 }, // N°
-    { wch: 70 }, // Descripción
+    { wch: 60 }, // Descripción
     { wch: 10 }, // Unidad
     { wch: 12 }, // Cantidad
     { wch: 15 }, // Costo
     { wch: 15 }, // Total
-    { wch: 10 }  // Tipo
+    { wch: 10 }, // Tipo
+    { wch: 15 }, // Coincidencia
+    { wch: 25 }  // Ponderado
   ];
 
-  xlsx.utils.book_append_sheet(wb, ws, "Agrupacion Insumos");
+  xlsx.utils.book_append_sheet(wb, ws, "Agrupacion IA");
 
   const outputFileName = '../../Agrupacion_Insumos_Golden.xlsx';
   xlsx.writeFile(wb, outputFileName);
-  console.log(`✅ Archivo Excel generado: ${outputFileName} con todos los ${allItems.length} insumos y sus columnas.`);
+  console.log(`✅ Archivo Excel generado: ${outputFileName} con todos los ${allItems.length} insumos, sus coincidencias y promedios.`);
 
   pool.end();
 }

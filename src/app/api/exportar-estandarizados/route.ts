@@ -21,10 +21,14 @@ export async function POST(req: Request) {
     // Definir columnas
     sheet.columns = [
       { header: 'N° Insumo', key: 'numero', width: 12 },
+      { header: 'Tipo', key: 'tipo', width: 15 },
       { header: 'Descripción', key: 'descripcion', width: 50 },
       { header: 'Unidad', key: 'unidad', width: 10 },
       { header: 'Cantidad', key: 'cantidad', width: 18 },
       { header: 'Precio Unitario', key: 'costo', width: 18 },
+      { header: 'Parcial', key: 'total', width: 18 },
+      { header: '% Coincidencia IA', key: 'similitud_ia_porcentaje', width: 20 },
+      { header: 'Grupo Sugerido IA', key: 'grupo_ia_sugerido', width: 25 },
       { header: 'Estado', key: 'estado', width: 12 },
       { header: 'Código Fusión', key: 'codigo_estandar', width: 15 },
       { header: 'Descripción Fusión', key: 'descripcion_estandar', width: 50 },
@@ -60,10 +64,14 @@ export async function POST(req: Request) {
     insumos.forEach((item, index) => {
       const row = sheet.addRow({
         numero: item.numero,
+        tipo: item.tipo,
         descripcion: item.descripcion,
         unidad: item.unidad,
         cantidad: parseFloat(item.cantidad) || 0,
         costo: parseFloat(item.costo) || 0,
+        total: parseFloat(item.total) || 0,
+        similitud_ia_porcentaje: item.similitud_ia_porcentaje || '-',
+        grupo_ia_sugerido: item.grupo_ia_sugerido || '-',
         estado: item.codigo_estandar ? 'FUSIONADO' : 'ORIGINAL',
         codigo_estandar: item.codigo_estandar || '-',
         descripcion_estandar: item.descripcion_estandar || '-',
@@ -104,6 +112,9 @@ export async function POST(req: Request) {
       // Formatos numéricos con 4 decimales
       row.getCell('cantidad').numFmt = '#,##0.0000';
       row.getCell('costo').numFmt = '"S/" #,##0.0000';
+      row.getCell('total').numFmt = '"S/" #,##0.0000';
+      row.getCell('similitud_ia_porcentaje').alignment = { horizontal: 'center' };
+      
       if (item.codigo_estandar) {
         row.getCell('factor_conversion').numFmt = '#,##0.0000';
       } else {
