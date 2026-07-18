@@ -40,9 +40,11 @@ yarn-error.log*
 /.agents/
 /.mcp.json
 /venv311/
+/.venv/
 *.log
 *.xlsx
 *.pdf
+*.csv
 
 # typescript
 *.tsbuildinfo

@@ -16,6 +16,8 @@ export default async function EstandarizadorPage() {
         p.cantidad_insumo_p as cantidad, 
         p.costo_p as costo, 
         p.total_p as total,
+        p.similitud_ia_porcentaje,
+        p.grupo_ia_sugerido,
         est.codigo_estandar,
         est.descripcion_estandar,
         est.unidad_estandar,

@@ -39,8 +39,9 @@ function addBorder(cell: any) {
 }
 
 export async function GET() {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
 
     // QUERY 1: Todas las compras con sus vinculaciones
     const comprasResult = await client.query(`
@@ -53,28 +54,28 @@ export async function GET() {
         (COALESCE(c.cantidad_und, c.cantidad_c) * COALESCE(c.precio_und, c.precio_unit_c)) as total,
         CASE WHEN m.id IS NOT NULL THEN 'VINCULADO' ELSE 'SIN VINCULAR' END as estado,
         m.usuario, m.created_at as fecha,
-        ir.codigo_insumo, ir.descripcion_insumo,
-        ir.unidad as unidad_insumo
+        ir.codigo_estandar as codigo_insumo, ir.descripcion_estandar as descripcion_insumo,
+        ir.unidad_estandar as unidad_insumo
       FROM compras_c c
       LEFT JOIN mapeo_vinculacion m ON c.id = m.compra_id
-      LEFT JOIN insumos_resumen ir ON m.codigo_insumo = ir.codigo_insumo
+      LEFT JOIN insumos_estandarizados_c ir ON m.codigo_insumo = ir.codigo_estandar
       ORDER BY c.anio DESC, c.num_compra, c.id
     `);
 
     // QUERY 2: Todos los insumos con sus vinculaciones
     const insumosResult = await client.query(`
       SELECT
-        i.codigo_insumo, i.descripcion_insumo, i.unidad as unidad_insumo,
-        i.estado, i.comentario,
+        i.codigo_estandar as codigo_insumo, i.descripcion_estandar as descripcion_insumo, i.unidad_estandar as unidad_insumo,
+        'ACTIVO' as estado, '' as comentario,
         c.id as compra_id, c.anio, c.tipo_compra, c.num_compra,
         c.detalle as detalle_compra,
         COALESCE(c.unidad_und, c.unidad) as unidad_norm,
         COALESCE(c.cantidad_und, c.cantidad_c) as cantidad_norm,
         COALESCE(c.precio_und, c.precio_unit_c) as precio_norm
-      FROM insumos_resumen i
-      LEFT JOIN mapeo_vinculacion m ON i.codigo_insumo = m.codigo_insumo
+      FROM insumos_estandarizados_c i
+      LEFT JOIN mapeo_vinculacion m ON i.codigo_estandar = m.codigo_insumo
       LEFT JOIN compras_c c ON m.compra_id = c.id
-      ORDER BY i.descripcion_insumo, c.anio DESC, c.num_compra
+      ORDER BY i.descripcion_estandar, c.anio DESC, c.num_compra
     `);
 
     // QUERY 3: Estadísticas
@@ -82,11 +83,9 @@ export async function GET() {
       SELECT
         (SELECT COUNT(*) FROM compras_c) as total_compras,
         (SELECT COUNT(DISTINCT compra_id) FROM mapeo_vinculacion) as compras_vinculadas,
-        (SELECT COUNT(*) FROM insumos_resumen) as total_insumos,
+        (SELECT COUNT(*) FROM insumos_estandarizados_c) as total_insumos,
         (SELECT COUNT(DISTINCT codigo_insumo) FROM mapeo_vinculacion) as insumos_con_compras
     `);
-
-    client.release();
 
     // Crear Excel
     const workbook = new ExcelJS.Workbook();
@@ -195,7 +194,7 @@ export async function GET() {
       const wsRow = ws2.getRow(rowNum2);
       wsRow.values = {
         codigo_insumo: row.codigo_insumo,
-        descripcion_insumo: row.descripcion,
+        descripcion_insumo: row.descripcion_insumo,
         unidad_insumo: row.unidad_insumo,
         estado: row.estado || 'ACTIVO',
         comentario: row.comentario || '',
@@ -313,17 +312,23 @@ export async function GET() {
     // ═══════════════════════════════════════════════════════════════
     const insumosCompletoQuery = await client.query(`
       SELECT
-        i.codigo_insumo, i.descripcion_insumo, i.unidad,
-        i.cantidad_requerida_p as cantidad_insumo, i.precio_p as precio_insumo,
+        i.codigo_estandar as codigo_insumo, i.descripcion_estandar as descripcion_insumo, i.unidad_estandar as unidad,
+        COALESCE((
+          SELECT SUM(CAST(p.cantidad_insumo_p AS numeric) * a.factor_conversion)
+          FROM agrupacion_insumos_c a
+          JOIN insumos_p p ON a.numero_insumo_original = p.numero
+          WHERE a.codigo_estandar_fk = i.id
+        ), 0) as cantidad_insumo, 
+        i.precio_ponderado_c as precio_insumo,
         c.id as compra_id, c.anio, c.tipo_compra, c.num_compra,
         c.detalle as detalle_compra,
         COALESCE(c.unidad_und, c.unidad) as unidad_compra,
         COALESCE(c.cantidad_und, c.cantidad_c) as cantidad_compra,
         COALESCE(c.precio_und, c.precio_unit_c) as precio_compra
-      FROM insumos_resumen i
-      LEFT JOIN mapeo_vinculacion m ON i.codigo_insumo = m.codigo_insumo
+      FROM insumos_estandarizados_c i
+      LEFT JOIN mapeo_vinculacion m ON i.codigo_estandar = m.codigo_insumo
       LEFT JOIN compras_c c ON m.compra_id = c.id
-      ORDER BY i.codigo_insumo, i.descripcion_insumo, c.anio DESC, c.num_compra
+      ORDER BY i.codigo_estandar, i.descripcion_estandar, c.anio DESC, c.num_compra
     `);
 
     const ws4 = workbook.addWorksheet('4. Insumos Completo');
@@ -404,21 +409,32 @@ export async function GET() {
     // ═══════════════════════════════════════════════════════════════
     const resumenQuery = await client.query(`
       SELECT
-        i.codigo_insumo, i.descripcion_insumo, i.unidad,
-        i.cantidad_requerida_p as cantidad_insumo, i.precio_p as precio_insumo,
+        i.codigo_estandar as codigo_insumo, i.descripcion_estandar as descripcion_insumo, i.unidad_estandar as unidad,
+        COALESCE((
+          SELECT SUM(CAST(p.cantidad_insumo_p AS numeric) * a.factor_conversion)
+          FROM agrupacion_insumos_c a
+          JOIN insumos_p p ON a.numero_insumo_original = p.numero
+          WHERE a.codigo_estandar_fk = i.id
+        ), 0) as cantidad_insumo, 
+        i.precio_ponderado_c as precio_insumo,
         c.id as compra_id, c.anio, c.tipo_compra, c.num_compra,
         c.detalle as detalle_compra,
         COALESCE(c.unidad_und, c.unidad) as unidad_compra,
         COALESCE(c.cantidad_und, c.cantidad_c) as cantidad_compra,
         COALESCE(c.precio_und, c.precio_unit_c) as precio_compra,
-        SUM(COALESCE(c.cantidad_und, c.cantidad_c)) OVER (PARTITION BY i.codigo_insumo) as total_adquirido,
-        SUM(COALESCE(c.cantidad_und, c.cantidad_c) * COALESCE(c.precio_und, c.precio_unit_c)) OVER (PARTITION BY i.codigo_insumo) as total_valor_adquirido,
-        COUNT(c.id) OVER (PARTITION BY i.codigo_insumo) as num_compras,
-        (i.cantidad_requerida_p * COUNT(c.id) OVER (PARTITION BY i.codigo_insumo)) as total_presupuestado
-      FROM insumos_resumen i
-      LEFT JOIN mapeo_vinculacion m ON i.codigo_insumo = m.codigo_insumo
+        SUM(COALESCE(c.cantidad_und, c.cantidad_c)) OVER (PARTITION BY i.codigo_estandar) as total_adquirido,
+        SUM(COALESCE(c.cantidad_und, c.cantidad_c) * COALESCE(c.precio_und, c.precio_unit_c)) OVER (PARTITION BY i.codigo_estandar) as total_valor_adquirido,
+        COUNT(c.id) OVER (PARTITION BY i.codigo_estandar) as num_compras,
+        (COALESCE((
+          SELECT SUM(CAST(p.cantidad_insumo_p AS numeric) * a.factor_conversion)
+          FROM agrupacion_insumos_c a
+          JOIN insumos_p p ON a.numero_insumo_original = p.numero
+          WHERE a.codigo_estandar_fk = i.id
+        ), 0) * COUNT(c.id) OVER (PARTITION BY i.codigo_estandar)) as total_presupuestado
+      FROM insumos_estandarizados_c i
+      LEFT JOIN mapeo_vinculacion m ON i.codigo_estandar = m.codigo_insumo
       LEFT JOIN compras_c c ON m.compra_id = c.id
-      ORDER BY i.codigo_insumo, i.descripcion_insumo, c.anio DESC, c.num_compra
+      ORDER BY i.codigo_estandar, i.descripcion_estandar, c.anio DESC, c.num_compra
     `);
 
     const ws5 = workbook.addWorksheet('5. Resumen Completo');
@@ -475,7 +491,6 @@ export async function GET() {
       const totalAdquirido = row.total_adquirido || 0;
       const totalValorAdquirido = row.total_valor_adquirido || 0;
       const puPonderado = totalAdquirido > 0 ? totalValorAdquirido / totalAdquirido : 0;
-      const precioTotalPorCompra = (row.cantidad_compra || 0) * (row.precio_compra || 0);
 
       wsRow.values = {
         codigo_insumo: row.codigo_insumo,
@@ -540,5 +555,7 @@ export async function GET() {
   } catch (error) {
     console.error('Export Error:', error);
     return NextResponse.json({ error: 'Export failed' }, { status: 500 });
+  } finally {
+    if (client) client.release();
   }
 }

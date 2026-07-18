@@ -6,30 +6,36 @@ export async function GET(request: Request) {
   const mode = searchParams.get('mode');
   const insumo = searchParams.get('insumo');
 
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
 
     if (mode === 'insumos') {
       const result = await client.query(`
         SELECT
-          i.codigo_insumo as codigo,
-          i.descripcion_insumo as nombre,
-          i.unidad,
-          i.cantidad_requerida_p as meta_cantidad,
-          i.precio_p as precio,
+          e.codigo_estandar as codigo,
+          e.descripcion_estandar as nombre,
+          e.unidad_estandar as unidad,
+          COALESCE((
+            SELECT SUM(CAST(p.cantidad_insumo_p AS numeric) * a.factor_conversion)
+            FROM agrupacion_insumos_c a
+            JOIN insumos_p p ON a.numero_insumo_original = p.numero
+            WHERE a.codigo_estandar_fk = e.id
+          ), 0) as meta_cantidad,
+          e.precio_ponderado_c as precio,
           COUNT(m.id) as linked_count,
           COALESCE((
             SELECT SUM(c.cantidad_und) 
             FROM mapeo_vinculacion m2 
             JOIN compras_c c ON m2.compra_id = c.id 
-            WHERE m2.codigo_insumo = i.codigo_insumo
+            WHERE m2.codigo_insumo = e.codigo_estandar
           ), 0) as adquirido,
           0 as es_extra,
           1 as total_registros
-        FROM insumos_resumen i
-        LEFT JOIN mapeo_vinculacion m ON i.codigo_insumo = m.codigo_insumo
-        GROUP BY i.codigo_insumo, i.descripcion_insumo, i.unidad, i.cantidad_requerida_p, i.precio_p
-        ORDER BY i.descripcion_insumo
+        FROM insumos_estandarizados_c e
+        LEFT JOIN mapeo_vinculacion m ON e.codigo_estandar = m.codigo_insumo
+        GROUP BY e.id, e.codigo_estandar, e.descripcion_estandar, e.unidad_estandar, e.precio_ponderado_c
+        ORDER BY e.descripcion_estandar
       `);
 
       const unlinkedResult = await client.query(`
@@ -37,7 +43,6 @@ export async function GET(request: Request) {
         WHERE id NOT IN (SELECT compra_id FROM mapeo_vinculacion)
       `);
 
-      client.release();
       return NextResponse.json({
         insumos: result.rows,
         total_unlinked_compras: unlinkedResult.rows[0].count || 0
@@ -47,47 +52,53 @@ export async function GET(request: Request) {
         SELECT 
           c.id as codigo, 
           c.detalle as nombre, 
-          c.unidad_und as unidad, 
-          c.cantidad_und as cantidad, 
+          COALESCE(c.unidad_und, c.unidad) as unidad, 
+          COALESCE(c.cantidad_und, c.cantidad_c) as cantidad, 
           (SELECT COUNT(*) FROM mapeo_vinculacion m WHERE m.compra_id = c.id) as linked_count,
-          (SELECT ir.descripcion_insumo FROM mapeo_vinculacion m2 JOIN insumos_resumen ir ON m2.codigo_insumo = ir.codigo_insumo WHERE m2.compra_id = c.id LIMIT 1) as vinculado_a,
+          (SELECT e.descripcion_estandar FROM mapeo_vinculacion m2 JOIN insumos_estandarizados_c e ON m2.codigo_insumo = e.codigo_estandar WHERE m2.compra_id = c.id LIMIT 1) as vinculado_a,
           c.num_compra,
           c.tipo_compra,
-          c.anio
+          c.anio,
+          c.siaf,
+          c.mes,
+          c.origen
         FROM compras_c c
         ORDER BY c.id DESC
       `);
-      client.release();
       return NextResponse.json({ compras: result.rows });
     } else if (searchParams.get('compra_master')) {
       const compraId = searchParams.get('compra_master');
       
       const insumosResult = await client.query(`
         SELECT 
-          i.codigo_insumo as codigo,
-          i.descripcion_insumo as nombre,
-          i.unidad,
-          i.cantidad_requerida_p as meta_cantidad,
+          e.codigo_estandar as codigo,
+          e.descripcion_estandar as nombre,
+          e.unidad_estandar as unidad,
+          COALESCE((
+            SELECT SUM(CAST(p.cantidad_insumo_p AS numeric) * a.factor_conversion)
+            FROM agrupacion_insumos_c a
+            JOIN insumos_p p ON a.numero_insumo_original = p.numero
+            WHERE a.codigo_estandar_fk = e.id
+          ), 0) as meta_cantidad,
           COALESCE((
             SELECT SUM(c2.cantidad_und) 
             FROM mapeo_vinculacion m2 
             JOIN compras_c c2 ON m2.compra_id = c2.id 
-            WHERE m2.codigo_insumo = i.codigo_insumo
+            WHERE m2.codigo_insumo = e.codigo_estandar
           ), 0) as adquirido,
           CASE 
             WHEN m.id IS NOT NULL THEN 'vinculado'
             ELSE 'disponible'
           END as estado
-        FROM (SELECT DISTINCT codigo_insumo, descripcion_insumo, unidad, cantidad_requerida_p FROM insumos_resumen) i
-        LEFT JOIN mapeo_vinculacion m ON i.codigo_insumo = m.codigo_insumo AND m.compra_id = $1
-        ORDER BY i.descripcion_insumo
+        FROM insumos_estandarizados_c e
+        LEFT JOIN mapeo_vinculacion m ON e.codigo_estandar = m.codigo_insumo AND m.compra_id = $1
+        ORDER BY e.descripcion_estandar
       `, [compraId]);
       
       // Check if this compra is linked to anything at all
       const checkLink = await client.query('SELECT codigo_insumo FROM mapeo_vinculacion WHERE compra_id = $1', [compraId]);
       const isLinkedTo = checkLink.rows.length > 0 ? checkLink.rows[0].codigo_insumo : null;
 
-      client.release();
       return NextResponse.json({
         isLinkedTo: isLinkedTo,
         insumos: insumosResult.rows
@@ -95,10 +106,15 @@ export async function GET(request: Request) {
     } else if (insumo) {
       const metaResult = await client.query(`
         SELECT
-          cantidad_requerida_p as meta_cantidad,
-          unidad
-        FROM insumos_resumen
-        WHERE codigo_insumo = $1
+          e.unidad_estandar as unidad,
+          COALESCE((
+            SELECT SUM(CAST(p.cantidad_insumo_p AS numeric) * a.factor_conversion)
+            FROM agrupacion_insumos_c a
+            JOIN insumos_p p ON a.numero_insumo_original = p.numero
+            WHERE a.codigo_estandar_fk = e.id
+          ), 0) as meta_cantidad
+        FROM insumos_estandarizados_c e
+        WHERE e.codigo_estandar = $1
       `, [insumo]);
 
       const adquiridoResult = await client.query(`
@@ -115,10 +131,10 @@ export async function GET(request: Request) {
           c.anio,
           c.num_compra as orden_doc,
           c.detalle as detalle_compra,
-          c.unidad_und as unidad,
-          c.cantidad_und as cantidad,
-          c.precio_und as precio,
-          (c.cantidad_und * c.precio_und) as total,
+          COALESCE(c.unidad_und, c.unidad) as unidad,
+          COALESCE(c.cantidad_und, c.cantidad_c) as cantidad,
+          COALESCE(c.precio_und, c.precio_unit_c) as precio,
+          COALESCE(c.cantidad_und * c.precio_und, c.total_c) as total,
           c.detalle as insumo_descripcion,
           '' as observacion,
           CASE 
@@ -126,7 +142,7 @@ export async function GET(request: Request) {
               WHEN EXISTS (SELECT 1 FROM mapeo_vinculacion m2 WHERE m2.compra_id = c.id) THEN 'bloqueado'
               ELSE 'disponible'
           END as estado,
-          (SELECT ir.descripcion_insumo FROM mapeo_vinculacion m2 JOIN insumos_resumen ir ON m2.codigo_insumo = ir.codigo_insumo WHERE m2.compra_id = c.id LIMIT 1) as vinculado_a
+          (SELECT e.descripcion_estandar FROM mapeo_vinculacion m2 JOIN insumos_estandarizados_c e ON m2.codigo_insumo = e.codigo_estandar WHERE m2.compra_id = c.id LIMIT 1) as vinculado_a
         FROM compras_c c
         ORDER BY c.id DESC
       `, [insumo]);
@@ -134,7 +150,6 @@ export async function GET(request: Request) {
       const meta = metaResult.rows[0] || { meta_cantidad: 0, unidad: '' };
       const adquirido = adquiridoResult.rows[0]?.adquirido || 0;
 
-      client.release();
       return NextResponse.json({
         meta_cantidad: meta.meta_cantidad || 0,
         unidad: meta.unidad || '',
@@ -143,11 +158,12 @@ export async function GET(request: Request) {
       });
     }
 
-    client.release();
     return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
   } catch (error) {
     console.error('Vinculacion Error:', error);
     return NextResponse.json({ error: 'Database error' }, { status: 500 });
+  } finally {
+    if (client) client.release();
   }
 }
 

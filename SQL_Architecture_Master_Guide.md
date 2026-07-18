@@ -51,6 +51,9 @@ Desglose detallado de los Análisis de Precios Unitarios (APU). Aquí se modific
 Registro físico de las adquisiciones realizadas en obra.
 *   **`id`** `SERIAL` (PK): Identificador de la compra.
 *   **`anio`** `TEXT`: Año del ejercicio.
+*   **`siaf`** `TEXT`: Código SIAF.
+*   **`mes`** `TEXT`: Mes de la compra.
+*   **`origen`** `TEXT`: Origen de la compra.
 *   **`componente`** `TEXT`: Componente o proyecto asociado.
 *   **`detalle`** `TEXT`: Descripción del recurso adquirido.
 *   **`unidad`** `TEXT`: Unidad de medida de la orden de compra.

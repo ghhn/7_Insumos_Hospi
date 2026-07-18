@@ -3,33 +3,37 @@ import ExcelJS from 'exceljs';
 import pool from '@/lib/db';
 
 export async function GET() {
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
 
     const result = await client.query(`
       SELECT
-        i.codigo_insumo as codigo,
-        i.descripcion_insumo as nombre,
-        i.unidad,
-        i.cantidad_requerida_p as meta_cantidad,
+        e.codigo_estandar as codigo,
+        e.descripcion_estandar as nombre,
+        e.unidad_estandar as unidad,
+        COALESCE((
+          SELECT SUM(CAST(p.cantidad_insumo_p AS numeric) * a.factor_conversion)
+          FROM agrupacion_insumos_c a
+          JOIN insumos_p p ON a.numero_insumo_original = p.numero
+          WHERE a.codigo_estandar_fk = e.id
+        ), 0) as meta_cantidad,
         COALESCE((
           SELECT SUM(c.cantidad_und)
           FROM mapeo_vinculacion m2
           JOIN compras_c c ON m2.compra_id = c.id
-          WHERE m2.codigo_insumo = i.codigo_insumo
+          WHERE m2.codigo_insumo = e.codigo_estandar
         ), 0) as adquirido,
         COUNT(m.id) as cantidad_vinculos,
         CASE
           WHEN COUNT(m.id) > 0 THEN 'VINCULADO'
           ELSE 'DISPONIBLE'
         END as estado
-      FROM insumos_resumen i
-      LEFT JOIN mapeo_vinculacion m ON i.codigo_insumo = m.codigo_insumo
-      GROUP BY i.codigo_insumo, i.descripcion_insumo, i.unidad, i.cantidad_requerida_p
-      ORDER BY i.descripcion_insumo
+      FROM insumos_estandarizados_c e
+      LEFT JOIN mapeo_vinculacion m ON e.codigo_estandar = m.codigo_insumo
+      GROUP BY e.id, e.codigo_estandar, e.descripcion_estandar, e.unidad_estandar
+      ORDER BY e.descripcion_estandar
     `);
-
-    client.release();
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Insumos Presupuesto');
@@ -108,5 +112,7 @@ export async function GET() {
   } catch (error) {
     console.error('Export Insumos Error:', error);
     return NextResponse.json({ error: 'Export failed' }, { status: 500 });
+  } finally {
+    if (client) client.release();
   }
 }

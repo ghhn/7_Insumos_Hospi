@@ -14,6 +14,16 @@ type Insumo = {
   descripcion_estandar?: string;
   unidad_estandar?: string;
   factor_conversion?: string;
+  similitud_ia_porcentaje?: number;
+  grupo_ia_sugerido?: string;
+  precio_ponderado_c?: string;
+};
+
+const getSimilitudColor = (porcentaje: number) => {
+  if (porcentaje >= 90) return { bg: '#dcfce7', text: '#166534', border: '#bbf7d0' }; // Verde
+  if (porcentaje >= 85) return { bg: '#fef08a', text: '#854d0e', border: '#fde047' }; // Amarillo
+  if (porcentaje >= 80) return { bg: '#fed7aa', text: '#9a3412', border: '#fdba74' }; // Naranja
+  return { bg: '#fee2e2', text: '#991b1b', border: '#fecaca' }; // Rojo
 };
 
 export default function EstandarizadorClient({ initialInsumos }: { initialInsumos: Insumo[] }) {
@@ -21,7 +31,9 @@ export default function EstandarizadorClient({ initialInsumos }: { initialInsumo
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'original' | 'fusionado'>('all');
+  const [autoAtraer, setAutoAtraer] = useState<boolean>(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Insumo | 'similitud_ia_porcentaje' | '', direction: 'asc' | 'desc' }>({ key: '', direction: 'asc' });
   
   // Right Panel State
   const [stdName, setStdName] = useState('');
@@ -56,21 +68,100 @@ export default function EstandarizadorClient({ initialInsumos }: { initialInsumo
 
   const selectedItems = useMemo(() => insumos.filter(i => selected.has(i.numero)), [insumos, selected]);
   
-  const filteredInsumos = useMemo(() => {
-    let result = insumos;
-    
-    // Apply filter
-    if (filter === 'original') result = result.filter(i => !i.codigo_estandar);
-    if (filter === 'fusionado') result = result.filter(i => !!i.codigo_estandar);
-
-    // Apply search
-    if (search) {
-      const s = search.toLowerCase();
-      result = result.filter(i => i.descripcion.toLowerCase().includes(s) || i.numero.toLowerCase().includes(s));
+  // Determine the active IA group based on the first selected item
+  const activeIAGroup = useMemo(() => {
+    if (selectedItems.length > 0) {
+      // Get the first item selected (using the order in which they appear in the original array)
+      const firstItem = selectedItems[0];
+      return firstItem.grupo_ia_sugerido;
     }
+    return null;
+  }, [selectedItems]);
+  
+  const filteredInsumos = useMemo(() => {
+    // 1. COMBINE ITERATIONS: Filter in a single pass instead of creating multiple intermediate arrays (js-combine-iterations)
+    const s = search ? search.toLowerCase() : '';
+    let result = insumos.filter(i => {
+      // Filter by status
+      if (filter === 'original' && !!i.codigo_estandar) return false;
+      if (filter === 'fusionado' && !i.codigo_estandar) return false;
+      
+      // Filter by search term
+      if (s) {
+        const descMatch = i.descripcion.toLowerCase().includes(s);
+        const numMatch = i.numero.toLowerCase().includes(s);
+        const iaMatch = i.grupo_ia_sugerido && i.grupo_ia_sugerido.toLowerCase().includes(s);
+        if (!descMatch && !numMatch && !iaMatch) return false;
+      }
+      return true;
+    });
     
+    // 2. Apply sorting
+    if (sortConfig.key) {
+      result.sort((a, b) => {
+        let aValue = a[sortConfig.key as keyof Insumo];
+        let bValue = b[sortConfig.key as keyof Insumo];
+        
+        // Handle numeric conversion for specific columns
+        if (['cantidad', 'costo', 'total', 'similitud_ia_porcentaje'].includes(sortConfig.key)) {
+          aValue = parseFloat((aValue as string) || "0");
+          bValue = parseFloat((bValue as string) || "0");
+        }
+
+        if (aValue === undefined || aValue === null) aValue = '';
+        if (bValue === undefined || bValue === null) bValue = '';
+
+        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    // Apply Smart IA Auto-Atraer override
+    if (autoAtraer && activeIAGroup) {
+      result.sort((a, b) => {
+        const aMatch = a.grupo_ia_sugerido === activeIAGroup;
+        const bMatch = b.grupo_ia_sugerido === activeIAGroup;
+        
+        if (aMatch && !bMatch) return -1;
+        if (!aMatch && bMatch) return 1;
+        
+        if (aMatch && bMatch) {
+          const aVal = parseFloat((a.similitud_ia_porcentaje as any) || "0");
+          const bVal = parseFloat((b.similitud_ia_porcentaje as any) || "0");
+          return bVal - aVal; // Always descending for matches
+        }
+        return 0;
+      });
+    }
+
     return result;
-  }, [insumos, search, filter]);
+  }, [insumos, search, filter, sortConfig, autoAtraer, activeIAGroup]);
+
+  const handleSortChange = (key: keyof Insumo | 'similitud_ia_porcentaje', direction: string) => {
+    if (!direction) {
+      setSortConfig({ key: '', direction: 'asc' });
+    } else {
+      setSortConfig({ key, direction: direction as 'asc' | 'desc' });
+    }
+  };
+  
+  const renderSortDropdown = (key: keyof Insumo | 'similitud_ia_porcentaje', labelAsc: string = "A-Z", labelDesc: string = "Z-A") => {
+    const isActive = sortConfig.key === key;
+    const value = isActive ? sortConfig.direction : "";
+    return (
+      <select 
+        value={value}
+        onChange={(e) => handleSortChange(key, e.target.value)}
+        style={{ marginLeft: '4px', fontSize: '9px', padding: '1px', borderRadius: '3px', border: '1px solid #ccc', outline: 'none', cursor: 'pointer', maxWidth: '60px' }}
+        onClick={e => e.stopPropagation()} // Prevent clicking the th from triggering things
+      >
+        <option value="">--</option>
+        <option value="asc">{labelAsc}</option>
+        <option value="desc">{labelDesc}</option>
+      </select>
+    );
+  };
 
   const calculatedPrice = useMemo(() => {
     if (selectedItems.length === 0) return 0;
@@ -213,15 +304,29 @@ export default function EstandarizadorClient({ initialInsumos }: { initialInsumo
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
           <input 
             type="text"
-            placeholder="🔍 Buscar insumo..."
+            placeholder="🔍 Buscar insumo o grupo IA..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            style={{ flex: 1, padding: '4px 8px', fontSize: '13px', border: '1px solid #ccc', borderRadius: '4px', outline: 'none' }}
+            style={{ flex: 1, minWidth: '200px', padding: '4px 8px', fontSize: '13px', border: '1px solid #ccc', borderRadius: '4px', outline: 'none' }}
           />
           <button 
+            onClick={() => setAutoAtraer(!autoAtraer)}
+            style={{ 
+              padding: '4px 12px', fontSize: '12px', fontWeight: 'bold', border: '1px solid', borderRadius: '4px', cursor: 'pointer',
+              background: autoAtraer ? '#dbeafe' : '#f8f9fa', 
+              color: autoAtraer ? '#1e40af' : '#666',
+              borderColor: autoAtraer ? '#bfdbfe' : '#ddd',
+              display: 'flex', alignItems: 'center', gap: '4px',
+              transition: 'all 0.2s'
+            }}
+            title="Agrupa automáticamente los insumos similares al primer insumo que selecciones"
+          >
+            🧲 Auto-Atraer {autoAtraer ? 'ON' : 'OFF'}
+          </button>
+          <button  
             onClick={handleExportExcel}
             disabled={isExporting}
             style={{ 
@@ -257,12 +362,31 @@ export default function EstandarizadorClient({ initialInsumos }: { initialInsumo
             <thead style={{ position: 'sticky', top: 0, zIndex: 10, backgroundColor: '#1F3864' }}>
               <tr>
                 <th style={{ width: '30px', textAlign: 'center', padding: '6px 4px', fontSize: '11px' }}>Sel</th>
-                <th style={{ width: '50px', padding: '6px 4px', fontSize: '11px' }}>N°</th>
-                <th style={{ padding: '6px 4px', fontSize: '11px' }}>Descripción</th>
-                <th style={{ width: '70px', textAlign: 'center', padding: '6px 4px', fontSize: '11px' }}>Unidad</th>
-                <th style={{ width: '60px', textAlign: 'right', padding: '6px 4px', fontSize: '11px' }}>Cant.</th>
-                <th style={{ width: '70px', textAlign: 'right', padding: '6px 4px', fontSize: '11px' }}>Precio</th>
-                <th style={{ width: '80px', textAlign: 'center', padding: '6px 4px', fontSize: '11px' }}>Estado</th>
+                <th style={{ width: '70px', padding: '6px 4px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                  N°<br/>{renderSortDropdown('numero', 'Menor a Mayor', 'Mayor a Menor')}
+                </th>
+                <th style={{ padding: '6px 4px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                  Descripción<br/>{renderSortDropdown('descripcion', 'A - Z', 'Z - A')}
+                </th>
+                <th style={{ width: '70px', textAlign: 'center', padding: '6px 4px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                  Tipo<br/>{renderSortDropdown('tipo', 'A - Z', 'Z - A')}
+                </th>
+                <th style={{ width: '80px', textAlign: 'center', padding: '6px 4px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                  Unidad<br/>{renderSortDropdown('unidad', 'A - Z', 'Z - A')}
+                </th>
+                <th style={{ width: '70px', textAlign: 'right', padding: '6px 4px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                  Cant.<br/>{renderSortDropdown('cantidad', 'Menor a Mayor', 'Mayor a Menor')}
+                </th>
+                <th style={{ width: '80px', textAlign: 'right', padding: '6px 4px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                  Precio<br/>{renderSortDropdown('costo', 'Menor a Mayor', 'Mayor a Menor')}
+                </th>
+                <th style={{ width: '80px', textAlign: 'right', padding: '6px 4px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                  Parcial<br/>{renderSortDropdown('total', 'Menor a Mayor', 'Mayor a Menor')}
+                </th>
+                <th style={{ width: '90px', textAlign: 'center', padding: '6px 4px', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                  % Coinc.<br/>{renderSortDropdown('similitud_ia_porcentaje', 'Menor a Mayor', 'Mayor a Menor')}
+                </th>
+                <th style={{ width: '70px', textAlign: 'center', padding: '6px 4px', fontSize: '11px' }}>Estado</th>
               </tr>
             </thead>
             <tbody>
@@ -303,17 +427,43 @@ export default function EstandarizadorClient({ initialInsumos }: { initialInsumo
                       <div style={{ fontWeight: isSelected ? 'bold' : 'normal', color: '#000', fontSize: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.descripcion}>
                         {item.descripcion}
                       </div>
-                      {isHomologated && (
-                        <div style={{ fontSize: '10px', color: '#16a34a', marginTop: '2px', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`Fusionado en: ${item.descripcion_estandar}`}>
-                          ✓ F: {item.descripcion_estandar}
-                        </div>
-                      )}
+                      
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
+                        {isHomologated && (
+                          <div style={{ fontSize: '10px', color: '#16a34a', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={`Fusionado en: ${item.descripcion_estandar}`}>
+                            ✓ F: {item.descripcion_estandar}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ textAlign: 'center', padding: '4px' }}>
+                      <span style={{ fontSize: '10px', color: '#555' }}>{item.tipo}</span>
                     </td>
                     <td style={{ textAlign: 'center', padding: '4px' }}>
                       <span style={{ background: '#f8f9fa', padding: '1px 4px', borderRadius: '3px', fontSize: '11px', border: '1px solid #eee' }}>{item.unidad}</span>
                     </td>
                     <td style={{ textAlign: 'right', fontSize: '11px', padding: '4px' }}>{parseFloat(item.cantidad).toFixed(2)}</td>
-                    <td style={{ textAlign: 'right', fontSize: '11px', padding: '4px', color: '#2563eb', fontWeight: 'bold' }}>S/ {Number(item.costo ?? 0).toFixed(2)}</td>
+                    <td style={{ textAlign: 'right', fontSize: '11px', padding: '4px', color: '#2563eb', fontWeight: 'bold' }}>S/ {parseFloat(item.costo || "0").toFixed(2)}</td>
+                    <td style={{ textAlign: 'right', fontSize: '11px', padding: '4px', color: '#000', fontWeight: 'bold' }}>S/ {parseFloat(item.total || "0").toFixed(2)}</td>
+                    <td style={{ textAlign: 'center', padding: '4px' }}>
+                      {activeIAGroup && item.grupo_ia_sugerido === activeIAGroup && !isHomologated && item.similitud_ia_porcentaje !== undefined ? (
+                        <div style={{ display: 'flex', justifyContent: 'center' }}>
+                          <span style={{ 
+                            fontSize: '10px', 
+                            background: getSimilitudColor(item.similitud_ia_porcentaje).bg, 
+                            color: getSimilitudColor(item.similitud_ia_porcentaje).text, 
+                            padding: '2px 6px', 
+                            borderRadius: '4px', 
+                            fontWeight: 'bold', 
+                            border: `1px solid ${getSimilitudColor(item.similitud_ia_porcentaje).border}` 
+                          }}>
+                            {item.similitud_ia_porcentaje}%
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ color: '#ccc', fontSize: '10px' }}>-</span>
+                      )}
+                    </td>
                     <td style={{ textAlign: 'center', padding: '4px' }}>
                       {isHomologated ? (
                         <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', alignItems: 'center' }}>

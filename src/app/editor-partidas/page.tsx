@@ -47,13 +47,9 @@ export default function EditorPartidas() {
     }
   };
 
-  const resetEditForm = (partida: Partida | null) => {
-    setEditForm(partida ? { ...partida } : null);
-  };
-
   const handleSelectPartida = (p: Partida) => {
     setSelectedPartida(p);
-    resetEditForm(p);
+    setEditForm({ ...p });
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -296,7 +292,7 @@ export default function EditorPartidas() {
                   <button 
                     type="button" 
                     onClick={() => {
-                      resetEditForm(selectedPartida);
+                      setEditForm(selectedPartida ? {...selectedPartida} : null);
                     }}
                     style={{ padding: '10px 20px', borderRadius: '6px', border: '1px solid #cbd5e1', background: 'white', color: '#475569', fontWeight: 600, cursor: 'pointer' }}
                   >
